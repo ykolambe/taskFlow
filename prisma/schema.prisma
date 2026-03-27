@@ -1,0 +1,359 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Platform ───────────────────────────────────────────────────────────────
+
+model PlatformOwner {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_owners")
+}
+
+// ─── Companies (Tenants) ────────────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  domain      String?
+  isActive    Boolean  @default(true)
+  modules     String[] @default(["tasks", "team", "org", "approvals"])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users            User[]
+  roleLevels       RoleLevel[]
+  tasks            Task[]
+  recurringTasks   RecurringTask[]
+  approvalRequests ApprovalRequest[]
+  ideas            Idea[]
+  taskStatuses     TaskStatusConfig[]
+  billing          CompanyBilling?
+  userReminders    UserReminder[]
+
+  @@map("companies")
+}
+
+// ─── Role Levels (Hierarchy) ────────────────────────────────────────────────
+
+model RoleLevel {
+  id        String  @id @default(cuid())
+  companyId String
+  name      String
+  level     Int     // 1 = top of hierarchy, higher number = lower
+  color     String  @default("#6366f1")
+  canApprove Boolean @default(true)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users   User[]
+
+  @@unique([companyId, level])
+  @@unique([companyId, name])
+  @@map("role_levels")
+}
+
+// ─── Users ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  roleLevelId  String?
+  parentId     String?
+  email        String
+  username     String
+  passwordHash String
+  firstName    String
+  lastName     String
+  avatarUrl    String?
+  bio          String?
+  phone        String?
+  isSuperAdmin Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleLevel RoleLevel? @relation(fields: [roleLevelId], references: [id])
+  parent    User?     @relation("UserHierarchy", fields: [parentId], references: [id])
+  children  User[]    @relation("UserHierarchy")
+
+  createdTasks       Task[]            @relation("TaskCreator")
+  assignedTasks      Task[]            @relation("TaskAssignee")
+  createdRecurring   RecurringTask[]   @relation("RecurringCreator")
+  assignedRecurring  RecurringTask[]   @relation("RecurringAssignee")
+  approvalRequests   ApprovalRequest[] @relation("ApprovalRequester")
+  approvals          Approval[]
+  taskComments       TaskComment[]
+  ideas              Idea[]
+  userReminders      UserReminder[]
+
+  @@unique([email, companyId])
+  @@unique([username, companyId])
+  @@map("users")
+}
+
+// ─── Personal reminders (dashboard / exec workflow) ───────────────────────
+
+model UserReminder {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  title     String
+  note      String?
+  remindAt  DateTime
+  isDone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@index([userId, remindAt])
+  @@map("user_reminders")
+}
+
+// ─── Tasks ──────────────────────────────────────────────────────────────────
+
+model Task {
+  id          String   @id @default(cuid())
+  companyId   String
+  creatorId   String
+  assigneeId  String
+  title       String
+  description String?
+  status      String   @default("TODO")
+  priority    Priority @default(MEDIUM)
+  dueDate     DateTime?
+  completedAt DateTime?
+  isArchived  Boolean    @default(false)
+  recurringId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator     User           @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignee    User           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  recurring   RecurringTask? @relation(fields: [recurringId], references: [id])
+  attachments  Attachment[]
+  comments     TaskComment[]
+
+  @@map("tasks")
+}
+
+// ─── Task Status Config (per-company custom statuses) ───────────────────────
+
+model TaskStatusConfig {
+  id        String     @id @default(cuid())
+  companyId String
+  key       String     // stored in Task.status (e.g. "TODO", "MY_STATUS_1")
+  label     String     // display name (e.g. "To Do", "Backlog")
+  color     String     @default("#64748b")
+  order     Int
+  type      StatusType @default(ACTIVE)
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, key])
+  @@unique([companyId, order])
+  @@map("task_status_configs")
+}
+
+enum StatusType {
+  OPEN    // Initial state — tasks start here
+  ACTIVE  // In-progress states (can have multiple)
+  REVIEW  // Assignee submits here; creator/higher approves
+  DONE    // Final state — triggers archiving
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ─── Recurring Tasks ────────────────────────────────────────────────────────
+
+model RecurringTask {
+  id          String    @id @default(cuid())
+  companyId   String
+  creatorId   String
+  assigneeId  String
+  title       String
+  description String?
+  priority    Priority  @default(MEDIUM)
+  frequency   Frequency
+  daysOfWeek  Int[]
+  dayOfMonth  Int?
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  templateAttachments Json      @default("[]")
+  isActive    Boolean   @default(true)
+  lastGenerated DateTime?
+  nextDue     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator  User    @relation("RecurringCreator", fields: [creatorId], references: [id])
+  assignee User    @relation("RecurringAssignee", fields: [assigneeId], references: [id])
+  tasks    Task[]
+
+  @@map("recurring_tasks")
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ─── Approval Requests ──────────────────────────────────────────────────────
+
+model ApprovalRequest {
+  id            String         @id @default(cuid())
+  companyId     String
+  requesterId   String
+  newUserData   Json
+  approverChain Json           @default("[]")  // ordered array of user IDs: [directParentId, ..., rootId]
+  status        ApprovalStatus @default(PENDING)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requester User       @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  approvals Approval[]
+
+  @@map("approval_requests")
+}
+
+model Approval {
+  id         String         @id @default(cuid())
+  requestId  String
+  approverId String
+  status     ApprovalStatus @default(PENDING)
+  comment    String?
+  createdAt  DateTime       @default(now())
+
+  request  ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver User            @relation(fields: [approverId], references: [id])
+
+  @@map("approvals")
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Task Comments ──────────────────────────────────────────────────────────
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("task_comments")
+}
+
+// ─── Ideas (Brain Dump Board) ────────────────────────────────────────────────
+
+model Idea {
+  id          String      @id @default(cuid())
+  companyId   String
+  userId      String
+  title       String
+  body        String?
+  color       String      @default("#6366f1")
+  status      IdeaStatus  @default(IDEA)
+  convertedTaskId String?
+  isPinned    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ideas")
+}
+
+enum IdeaStatus {
+  IDEA
+  THINKING
+  CONVERTED
+  DROPPED
+}
+
+// ─── Attachments ────────────────────────────────────────────────────────────
+
+model Attachment {
+  id         String   @id @default(cuid())
+  taskId     String
+  fileName   String
+  fileUrl    String
+  fileSize   Int
+  mimeType   String
+  uploaderId String
+  createdAt  DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+// ─── Billing ────────────────────────────────────────────────────────────────
+
+// Global singleton — platform owner configures default pricing here.
+// id is always "default"; upsert is safe at any time.
+model BillingConfig {
+  id                 String   @id @default("default")
+  defaultPricePerSeat Float   @default(0)
+  currency           String   @default("USD")
+  billingCycle       String   @default("monthly") // monthly | annual
+  updatedAt          DateTime @updatedAt
+
+  @@map("billing_config")
+}
+
+// One row per company — created lazily on first edit.
+// pricePerSeat null = inherit from BillingConfig.defaultPricePerSeat
+model CompanyBilling {
+  id                 String    @id @default(cuid())
+  companyId          String    @unique
+  plan               String    @default("FREE")    // FREE | STARTER | PRO | ENTERPRISE
+  pricePerSeat       Float?                         // null = use platform default
+  seatsLimit         Int?                           // null = unlimited
+  billingEmail       String?
+  notes              String?
+  trialEndsAt        DateTime?
+  subscriptionId     String?                        // future: Stripe subscription ID
+  subscriptionStatus String    @default("active")  // active | trialing | past_due | canceled
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_billing")
+}

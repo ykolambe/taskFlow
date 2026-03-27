@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #090d17;
+  --surface: #1b2130;
+  --border: #323a4a;
+  --text: #f2f3f7;
+  --primary: #8b5cf6;
+}
+
+* { box-sizing: border-box; padding: 0; margin: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background-image:
+    radial-gradient(circle at 10% 5%, rgba(139, 92, 246, 0.12), transparent 35%),
+    radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.08), transparent 30%);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #101522; }
+::-webkit-scrollbar-thumb { background: #4b566b; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #697488; }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #101522 inset;
+  -webkit-text-fill-color: #f2f3f7;
+  caret-color: #f2f3f7;
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-surface-900/70 backdrop-blur-md border border-primary-500/15 rounded-2xl shadow-2xl shadow-black/20;
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-300 via-primary-400 to-accent-300 bg-clip-text text-transparent;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-surface-400 hover:text-surface-100 hover:bg-surface-700/60 transition-all duration-200 text-sm font-medium;
+  }
+  .nav-link.active {
+    @apply bg-primary-500/20 text-primary-200 border border-primary-400/40 shadow-lg shadow-primary-900/30;
+  }
+}
+
+.org-tree ul {
+  padding-top: 20px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.org-tree ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  border-left: 2px solid #334155;
+  height: 20px;
+}
+.org-tree li {
+  float: left;
+  text-align: center;
+  list-style-type: none;
+  position: relative;
+  padding: 20px 8px 0 8px;
+}
+.org-tree li::before,
+.org-tree li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  border-top: 2px solid #334155;
+  width: 50%;
+  height: 20px;
+}
+.org-tree li::after {
+  right: auto;
+  left: 50%;
+  border-left: 2px solid #334155;
+}
+.org-tree li:only-child::after,
+.org-tree li:only-child::before { display: none; }
+.org-tree li:only-child { padding-top: 0; }
+.org-tree li:first-child::before,
+.org-tree li:last-child::after { border: 0 none; }
+.org-tree li:last-child::before {
+  border-right: 2px solid #334155;
+  border-radius: 0 5px 0 0;
+}
+.org-tree li:first-child::after { border-radius: 5px 0 0 0; }
+
+/* Company node sits above; hide duplicate stem on first ul (connector is manual) */
+.org-tree.company-root > ul.org-tree-siblings::before {
+  display: none;
+}
+.org-tree.company-root > ul.org-tree-siblings {
+  padding-top: 0;
+}
