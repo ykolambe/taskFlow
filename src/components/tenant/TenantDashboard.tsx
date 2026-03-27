@@ -12,6 +12,7 @@ import {
   Crown,
   Flame,
   Target,
+  Lock,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/Card";
 import { TenantTokenPayload } from "@/lib/auth";
@@ -21,6 +22,8 @@ import DashboardReminders, { type ReminderRow } from "@/components/tenant/Dashbo
 import DashboardCharts, { type PriorityCount } from "@/components/tenant/DashboardCharts";
 import DashboardRecentTasks from "@/components/tenant/DashboardRecentTasks";
 import DashboardTaskRow from "@/components/tenant/DashboardTaskRow";
+import ExecutiveBriefCard from "@/components/tenant/ExecutiveBriefCard";
+import LeaderQaBubble from "@/components/tenant/LeaderQaBubble";
 
 interface Props {
   user: TenantTokenPayload;
@@ -33,6 +36,8 @@ interface Props {
   slug: string;
   reminders: ReminderRow[];
   remindersHasMore: boolean;
+  aiEnabled: boolean;
+  leaderQaEnabled: boolean;
   executiveInsights: {
     directReports: number;
     teamSize: number;
@@ -51,6 +56,8 @@ export default function TenantDashboard({
   slug,
   reminders,
   remindersHasMore,
+  aiEnabled,
+  leaderQaEnabled,
   executiveInsights,
 }: Props) {
   // Trigger auto-generation of due recurring tasks silently on every dashboard visit
@@ -71,6 +78,23 @@ export default function TenantDashboard({
             : "Here's your workspace overview"}
         </p>
       </div>
+
+      {isExecutiveDashboardUser(user) &&
+        (aiEnabled ? (
+          <ExecutiveBriefCard slug={slug} />
+        ) : (
+          <div className="rounded-2xl border border-surface-700 bg-surface-800/80 p-4">
+            <div className="flex items-start gap-2">
+              <Lock className="w-4 h-4 text-amber-400 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-surface-100">Executive AI Brief is locked</p>
+                <p className="text-xs text-surface-500 mt-1">
+                  Your company does not have the AI add-on enabled. Ask your platform admin to enable AI in company billing.
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
 
       {/* Leadership snapshot — directors / C-suite / top levels */}
       {executiveInsights && (
@@ -114,6 +138,8 @@ export default function TenantDashboard({
         </div>
       )}
 
+      <DashboardReminders slug={slug} initial={reminders} initialHasMore={remindersHasMore} />
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
@@ -149,8 +175,6 @@ export default function TenantDashboard({
       </div>
 
       <DashboardCharts myByPriority={chartData.myByPriority} teamByPriority={chartData.teamByPriority} />
-
-      <DashboardReminders slug={slug} initial={reminders} initialHasMore={remindersHasMore} />
 
       {/* Needs Review */}
       {reviewTasks.length > 0 && (
@@ -196,6 +220,8 @@ export default function TenantDashboard({
           </Link>
         ))}
       </div>
+
+      {aiEnabled && leaderQaEnabled && <LeaderQaBubble slug={slug} />}
     </div>
   );
 }

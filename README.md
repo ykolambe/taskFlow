@@ -180,3 +180,72 @@ TODO → IN_PROGRESS → READY_FOR_REVIEW → COMPLETED
 4. Set `NODE_ENV=production`
 5. Run `npm run build && npm start`
 # taskFlow
+
+---
+
+## Executive AI Brief (Gemini)
+
+Top-level leaders can generate an on-demand AI brief from the tenant dashboard.
+
+### Setup
+
+1. Add a Gemini key to your environment:
+
+```bash
+GEMINI_API_KEY="your-gemini-api-key"
+```
+
+2. Start the app and log in as a super admin or level 1-2 executive user.
+3. Go to `/t/[slug]/dashboard` and click **Generate Brief** in the **Executive AI Brief** card.
+
+### Notes
+
+- Calls are server-side only (key is never exposed to browser).
+- Endpoint: `POST /api/t/[slug]/ai/executive-brief`
+- If Gemini is unavailable, the app returns a deterministic fallback brief based on current metrics.
+
+### Company AI add-on gating
+
+- AI features are available only when the company billing setting `AI Add-on` is enabled.
+- Platform admins can configure:
+  - `AI Add-on` toggle
+  - `AI Price / Seat`
+  - monthly AI revenue preview (`active users * AI price per seat`)
+- When disabled:
+  - tenant AI UI shows a locked hint
+  - AI API routes return `403`
+
+### LeaderGPT (No RAG)
+
+- Natural-language leadership Q&A is SQL-grounded (no vector retrieval).
+- Endpoint: `POST /api/t/[slug]/ai/leader-qa`
+- Access requirements:
+  - company AI add-on enabled
+  - user-level entitlement `aiLeaderQaEnabled = true`
+- Entitlement is managed by tenant super admin from Team page member details.
+- UI appears as a bottom-right chat bubble on dashboard only.
+
+### LeaderGPT prompt help
+
+- Ask with explicit scope for best outcomes: `direct reports`, `team`, `role`, or specific names.
+- For task creation, include: goal/title, target scope, priority, and due date.
+- For bulk commands, use plain language:
+  - `Create weekly check-in tasks for all direct reports, HIGH priority, due Friday`
+  - `Create onboarding tasks for role supervisors, MEDIUM priority, due next Monday`
+  - `Create status update tasks for Alex, Maria, Tom, due tomorrow`
+- Review preview output before confirm: warnings and skipped entries indicate what needs clarification.
+
+### Bulk planning commands (V1)
+
+- Supported in chat: **bulk create tasks** only.
+- Flow uses strict guardrails:
+  - AI generates a dry-run preview (`bulk_create_preview`)
+  - user must explicitly confirm (`confirm_bulk_create`)
+  - preview includes skipped targets with reason when resolution fails
+  - server revalidates permissions before creating tasks
+- Safety limits:
+  - hard cap: 50 tasks per bulk command
+  - warning shown above 20 tasks + second confirmation required
+  - command rate-limited per user/company
+- Audit trail marker is appended to created task descriptions (`created_via_ai_bulk`).
+

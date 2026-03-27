@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ slug: string }> | { slug: string } };
 
-/** GET — list reminders for the current user (open first, then by time) */
+/** GET — list reminders for the current user (open first, newest first) */
 export async function GET(req: NextRequest, { params }: Params) {
   const { slug } = await params;
   const user = await getTenantUser(slug);
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       userId: user.userId,
       ...(includeDone ? {} : { isDone: false }),
     },
-    orderBy: [{ isDone: "asc" }, { remindAt: "asc" }],
+    orderBy: [{ isDone: "asc" }, { createdAt: "desc" }],
     skip,
     take,
   });

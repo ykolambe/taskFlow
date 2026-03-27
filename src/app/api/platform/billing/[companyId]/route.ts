@@ -43,48 +43,65 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const company = await prisma.company.findUnique({ where: { id: companyId } });
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
-  const {
-    plan,
-    pricePerSeat,
-    seatsLimit,
-    billingEmail,
-    notes,
-    trialEndsAt,
-    subscriptionId,
-    subscriptionStatus,
-  } = await req.json();
+  try {
+    const {
+      plan,
+      pricePerSeat,
+      aiAddonEnabled,
+      aiPricePerSeat,
+      seatsLimit,
+      billingEmail,
+      notes,
+      trialEndsAt,
+      subscriptionId,
+      subscriptionStatus,
+    } = await req.json();
 
-  const billing = await prisma.companyBilling.upsert({
-    where: { companyId },
-    update: {
-      ...(plan !== undefined && { plan }),
-      // Allow explicit null to "reset to default"
-      ...(pricePerSeat !== undefined && {
-        pricePerSeat: pricePerSeat === null || pricePerSeat === "" ? null : Number(pricePerSeat),
-      }),
-      ...(seatsLimit !== undefined && {
-        seatsLimit: seatsLimit === null || seatsLimit === "" ? null : Number(seatsLimit),
-      }),
-      ...(billingEmail !== undefined && { billingEmail: billingEmail || null }),
-      ...(notes !== undefined && { notes: notes || null }),
-      ...(trialEndsAt !== undefined && {
+    const billing = await prisma.companyBilling.upsert({
+      where: { companyId },
+      update: {
+        ...(plan !== undefined && { plan }),
+        // Allow explicit null to "reset to default"
+        ...(pricePerSeat !== undefined && {
+          pricePerSeat: pricePerSeat === null || pricePerSeat === "" ? null : Number(pricePerSeat),
+        }),
+        ...(aiAddonEnabled !== undefined && { aiAddonEnabled: Boolean(aiAddonEnabled) }),
+        ...(aiPricePerSeat !== undefined && {
+          aiPricePerSeat: aiPricePerSeat === null || aiPricePerSeat === "" ? null : Number(aiPricePerSeat),
+        }),
+        ...(seatsLimit !== undefined && {
+          seatsLimit: seatsLimit === null || seatsLimit === "" ? null : Number(seatsLimit),
+        }),
+        ...(billingEmail !== undefined && { billingEmail: billingEmail || null }),
+        ...(notes !== undefined && { notes: notes || null }),
+        ...(trialEndsAt !== undefined && {
+          trialEndsAt: trialEndsAt ? new Date(trialEndsAt) : null,
+        }),
+        ...(subscriptionId !== undefined && { subscriptionId: subscriptionId || null }),
+        ...(subscriptionStatus !== undefined && { subscriptionStatus }),
+      },
+      create: {
+        companyId,
+        plan: plan ?? "FREE",
+        pricePerSeat: pricePerSeat !== undefined && pricePerSeat !== "" ? Number(pricePerSeat) : null,
+        aiAddonEnabled: aiAddonEnabled ?? false,
+        aiPricePerSeat: aiPricePerSeat !== undefined && aiPricePerSeat !== "" ? Number(aiPricePerSeat) : null,
+        seatsLimit: seatsLimit !== undefined && seatsLimit !== "" ? Number(seatsLimit) : null,
+        billingEmail: billingEmail || null,
+        notes: notes || null,
         trialEndsAt: trialEndsAt ? new Date(trialEndsAt) : null,
-      }),
-      ...(subscriptionId !== undefined && { subscriptionId: subscriptionId || null }),
-      ...(subscriptionStatus !== undefined && { subscriptionStatus }),
-    },
-    create: {
-      companyId,
-      plan: plan ?? "FREE",
-      pricePerSeat: pricePerSeat !== undefined && pricePerSeat !== "" ? Number(pricePerSeat) : null,
-      seatsLimit: seatsLimit !== undefined && seatsLimit !== "" ? Number(seatsLimit) : null,
-      billingEmail: billingEmail || null,
-      notes: notes || null,
-      trialEndsAt: trialEndsAt ? new Date(trialEndsAt) : null,
-      subscriptionId: subscriptionId || null,
-      subscriptionStatus: subscriptionStatus ?? "active",
-    },
-  });
+        subscriptionId: subscriptionId || null,
+        subscriptionStatus: subscriptionStatus ?? "active",
+      },
+    });
 
-  return NextResponse.json({ success: true, billing });
+    return NextResponse.json({ success: true, billing });
+  } catch (err) {
+    console.error("Billing upsert failed", err);
+    const message =
+      err instanceof Error && err.message.includes("Unknown argument `aiAddonEnabled`")
+        ? "Server Prisma client is stale. Run `npx prisma generate` and restart `npm run dev`."
+        : "Failed to save billing settings";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Settings, Plus, Trash2, Save, Key, Copy, User, ListChecks, GripVertical, Upload } from "lucide-react";
+import { Settings, Plus, Trash2, Save, Key, Copy, User, ListChecks, GripVertical, Upload, MessageCircle } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { TenantTokenPayload } from "@/lib/auth";
@@ -68,6 +68,66 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
   const [newStatus, setNewStatus] = useState({ label: "", color: "#64748b", type: "ACTIVE" as StatusConfig["type"] });
   const [addingStatus, setAddingStatus] = useState(false);
   const [showAddStatus, setShowAddStatus] = useState(false);
+
+  // Channel management
+  const [channels, setChannels] = useState<{ id: string; slug: string; name: string; type: "GLOBAL" | "ROLE" | "CUSTOM"; roleLevelId: string | null }[] | null>(null);
+  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [channelForm, setChannelForm] = useState<{ slug: string; name: string; type: "GLOBAL" | "ROLE" | "CUSTOM"; roleLevelId: string }>({
+    slug: "",
+    name: "",
+    type: "GLOBAL",
+    roleLevelId: "",
+  });
+  const [creatingChannel, setCreatingChannel] = useState(false);
+
+  const loadChannels = async () => {
+    setLoadingChannels(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/chat/channels`);
+      const j = await res.json();
+      if (!res.ok) {
+        toast.error(j.error || "Could not load channels");
+        return;
+      }
+      setChannels(j.data ?? []);
+    } finally {
+      setLoadingChannels(false);
+    }
+  };
+
+  const handleCreateChannel = async () => {
+    if (!channelForm.slug.trim() || !channelForm.name.trim()) {
+      toast.error("Slug and name are required");
+      return;
+    }
+    if (channelForm.type === "ROLE" && !channelForm.roleLevelId) {
+      toast.error("Select a role for ROLE channels");
+      return;
+    }
+    setCreatingChannel(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/chat/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: channelForm.slug,
+          name: channelForm.name,
+          type: channelForm.type,
+          roleLevelId: channelForm.type === "ROLE" ? channelForm.roleLevelId : null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        toast.error(j.error || "Could not create channel");
+        return;
+      }
+      toast.success("Channel created");
+      setChannelForm({ slug: "", name: "", type: "GLOBAL", roleLevelId: "" });
+      await loadChannels();
+    } finally {
+      setCreatingChannel(false);
+    }
+  };
 
   const addLevel = () => {
     const nextLevel = roleLevels.length + 1;
@@ -444,6 +504,109 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
           <Save className="w-3.5 h-3.5" /> Save Status Names & Colors
         </Button>
       </div>
+
+      {/* Team Chat Channels (super admin) */}
+      {user.isSuperAdmin && (
+        <div className="bg-surface-800 border border-surface-700 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-primary-400" />
+              <h2 className="font-semibold text-surface-100">Team Chat Channels</h2>
+            </div>
+            <button
+              type="button"
+              onClick={channels === null ? loadChannels : undefined}
+              className="text-xs text-primary-400 hover:text-primary-300"
+            >
+              {channels === null ? "Load channels" : ""}
+            </button>
+          </div>
+          <p className="text-xs text-surface-500 mb-4">
+            Configure company-wide chat channels. Use <span className="font-semibold text-surface-200">GLOBAL</span> or{" "}
+            <span className="font-semibold text-surface-200">CUSTOM</span> for channels that everyone can access. Use{" "}
+            <span className="font-semibold text-surface-200">ROLE</span> only for narrower leadership or supervisor groups.
+          </p>
+
+          {/* Existing channels */}
+          <div className="space-y-1 mb-4 max-h-40 overflow-y-auto pr-1">
+            {loadingChannels && <p className="text-xs text-surface-500">Loading channels…</p>}
+            {channels && channels.length === 0 && !loadingChannels && (
+              <p className="text-xs text-surface-600 italic">No channels yet. Create your first one below.</p>
+            )}
+            {channels &&
+              channels.map((ch) => (
+                <div
+                  key={ch.id}
+                  className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-surface-750 text-xs text-surface-200"
+                >
+                  <span className="truncate">#{ch.slug}</span>
+                  <span className="text-[10px] uppercase text-surface-500">{ch.type}</span>
+                </div>
+              ))}
+          </div>
+
+          {/* Create channel form */}
+          <div className="border-t border-surface-700 pt-3 space-y-2">
+            <p className="text-xs font-semibold text-surface-300">Create new channel</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Input
+                label="Slug"
+                placeholder="general"
+                value={channelForm.slug}
+                onChange={(e) => setChannelForm((f) => ({ ...f, slug: e.target.value }))}
+              />
+              <Input
+                label="Name"
+                placeholder="General chat"
+                value={channelForm.name}
+                onChange={(e) => setChannelForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <div>
+                <label className="block text-[11px] text-surface-500 mb-1">Type</label>
+                <select
+                  value={channelForm.type}
+                  onChange={(e) =>
+                    setChannelForm((f) => ({
+                      ...f,
+                      type: e.target.value as "GLOBAL" | "ROLE" | "CUSTOM",
+                      roleLevelId: e.target.value === "ROLE" ? f.roleLevelId : "",
+                    }))
+                  }
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-200 focus:outline-none focus:border-primary-500"
+                >
+                  <option value="GLOBAL">GLOBAL (everyone)</option>
+                  <option value="CUSTOM">CUSTOM (everyone)</option>
+                  <option value="ROLE">ROLE (by level)</option>
+                </select>
+              </div>
+            </div>
+
+            {channelForm.type === "ROLE" && (
+              <div className="mt-1">
+                <label className="block text-[11px] text-surface-500 mb-1">Role level for this channel</label>
+                <select
+                  value={channelForm.roleLevelId}
+                  onChange={(e) => setChannelForm((f) => ({ ...f, roleLevelId: e.target.value }))}
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-200 focus:outline-none focus:border-primary-500"
+                >
+                  <option value="">Select role…</option>
+                  {roleLevels.map((rl) => (
+                    <option key={rl.id} value={rl.id}>
+                      {rl.name} (L{rl.level})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="pt-1">
+              <Button size="sm" loading={creatingChannel} onClick={handleCreateChannel}>
+                <Plus className="w-3.5 h-3.5" /> Create Channel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Role Levels */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-5">

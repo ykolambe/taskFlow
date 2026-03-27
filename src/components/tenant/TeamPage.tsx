@@ -46,6 +46,7 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
   const [newCreds, setNewCreds] = useState<{ email: string; username: string; password: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [regenLoading, setRegenLoading] = useState(false);
+  const [updatingQaAccess, setUpdatingQaAccess] = useState(false);
   const [memberListPage, setMemberListPage] = useState(1);
   const MEMBER_PAGE_SIZE = 40;
 
@@ -162,6 +163,29 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
       setSelectedStats(null);
     } finally {
       setLoadingStats(false);
+    }
+  };
+
+  const handleToggleQaAccess = async (targetUser: User) => {
+    if (!currentUser.isSuperAdmin) return;
+    setUpdatingQaAccess(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/users/${targetUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aiLeaderQaEnabled: !targetUser.aiLeaderQaEnabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update access");
+        return;
+      }
+      const next = Boolean(data.data?.aiLeaderQaEnabled);
+      setSelectedUser((prev) => (prev ? { ...prev, aiLeaderQaEnabled: next } : prev));
+      toast.success(next ? "LeaderGPT access enabled" : "LeaderGPT access disabled");
+      router.refresh();
+    } finally {
+      setUpdatingQaAccess(false);
     }
   };
 
@@ -378,16 +402,27 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
             </div>
 
             {currentUser.isSuperAdmin && (
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={regenLoading}
-                onClick={() => handleRegenerateCreds(selectedUser.id)}
-                className="w-full"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Regenerate Credentials
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={updatingQaAccess}
+                  onClick={() => handleToggleQaAccess(selectedUser)}
+                  className="w-full"
+                >
+                  {selectedUser.aiLeaderQaEnabled ? "Disable LeaderGPT Access" : "Enable LeaderGPT Access"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={regenLoading}
+                  onClick={() => handleRegenerateCreds(selectedUser.id)}
+                  className="w-full"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Regenerate Credentials
+                </Button>
+              </div>
             )}
           </div>
         )}

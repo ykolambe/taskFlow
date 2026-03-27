@@ -19,6 +19,8 @@ interface CompanyBilling {
   id?: string;
   plan: string;
   pricePerSeat: number | null;
+  aiAddonEnabled: boolean;
+  aiPricePerSeat: number | null;
   seatsLimit: number | null;
   billingEmail: string | null;
   notes: string | null;
@@ -84,6 +86,8 @@ export default function CompanyDetail({ company }: { company: Company }) {
   const [billingForm, setBillingForm] = useState({
     plan: b?.plan ?? "FREE",
     pricePerSeat: b?.pricePerSeat !== null && b?.pricePerSeat !== undefined ? String(b.pricePerSeat) : "",
+    aiAddonEnabled: b?.aiAddonEnabled ?? false,
+    aiPricePerSeat: b?.aiPricePerSeat !== null && b?.aiPricePerSeat !== undefined ? String(b.aiPricePerSeat) : "",
     seatsLimit: b?.seatsLimit !== null && b?.seatsLimit !== undefined ? String(b.seatsLimit) : "",
     billingEmail: b?.billingEmail ?? "",
     notes: b?.notes ?? "",
@@ -160,6 +164,8 @@ export default function CompanyDetail({ company }: { company: Company }) {
         body: JSON.stringify({
           plan: billingForm.plan,
           pricePerSeat: billingForm.pricePerSeat === "" ? null : Number(billingForm.pricePerSeat),
+          aiAddonEnabled: billingForm.aiAddonEnabled,
+          aiPricePerSeat: billingForm.aiPricePerSeat === "" ? null : Number(billingForm.aiPricePerSeat),
           seatsLimit: billingForm.seatsLimit === "" ? null : Number(billingForm.seatsLimit),
           billingEmail: billingForm.billingEmail || null,
           notes: billingForm.notes || null,
@@ -172,8 +178,15 @@ export default function CompanyDetail({ company }: { company: Company }) {
         toast.success("Billing settings saved!");
         router.refresh();
       } else {
-        const data = await res.json();
-        toast.error(data.error || "Failed");
+        const raw = await res.text();
+        let msg = "Failed";
+        try {
+          const data = raw ? JSON.parse(raw) : null;
+          msg = data?.error || msg;
+        } catch {
+          // Non-JSON error response; keep generic message.
+        }
+        toast.error(msg);
       }
     } finally {
       setSavingBilling(false);
@@ -184,6 +197,10 @@ export default function CompanyDetail({ company }: { company: Company }) {
   const seats = company._count.users;
   const seatsLimit = billingForm.seatsLimit ? Number(billingForm.seatsLimit) : null;
   const seatsUsedPct = seatsLimit ? Math.min(100, Math.round((seats / seatsLimit) * 100)) : null;
+  const aiMonthlyTotal =
+    billingForm.aiAddonEnabled && billingForm.aiPricePerSeat !== ""
+      ? seats * Number(billingForm.aiPricePerSeat)
+      : null;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
@@ -462,6 +479,38 @@ export default function CompanyDetail({ company }: { company: Company }) {
                 onChange={(e) => setBillingForm({ ...billingForm, seatsLimit: e.target.value })}
                 placeholder="Unlimited"
               />
+
+              <div className="border border-surface-700 rounded-xl p-4 bg-surface-750/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-100">AI Add-on</p>
+                    <p className="text-xs text-surface-500">Enable paid AI capabilities for this company.</p>
+                  </div>
+                  <button
+                    onClick={() => setBillingForm({ ...billingForm, aiAddonEnabled: !billingForm.aiAddonEnabled })}
+                    className={`w-12 h-6 rounded-full transition-all relative ${billingForm.aiAddonEnabled ? "bg-primary-500" : "bg-surface-600"}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${billingForm.aiAddonEnabled ? "left-6" : "left-0.5"}`} />
+                  </button>
+                </div>
+
+                <Input
+                  label="AI Price / Seat"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.aiPricePerSeat}
+                  onChange={(e) => setBillingForm({ ...billingForm, aiPricePerSeat: e.target.value })}
+                  placeholder="e.g. 9.99"
+                />
+                <p className="text-[11px] text-surface-500">
+                  Estimated AI monthly total:{" "}
+                  <span className="text-surface-200 font-semibold">
+                    {aiMonthlyTotal === null ? "—" : aiMonthlyTotal.toFixed(2)}
+                  </span>{" "}
+                  ({seats} active seats)
+                </p>
+              </div>
             </div>
 
             {/* Subscription details */}

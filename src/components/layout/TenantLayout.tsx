@@ -98,6 +98,7 @@ export default function TenantLayout({
     { href: `/t/${slug}/tasks`, label: "Tasks", icon: CheckSquare, show: modules.includes("tasks") },
     { href: `/t/${slug}/team`, label: "Team", icon: Users, show: modules.includes("team") },
     { href: `/t/${slug}/org`, label: "Org Chart", icon: GitBranch, show: modules.includes("org") },
+    { href: `/t/${slug}/chat`, label: "Team Chat", icon: Bell, show: true },
     { href: `/t/${slug}/calendar`, label: "Calendar", icon: Calendar, show: modules.includes("tasks") },
     { href: `/t/${slug}/recurring`, label: "Recurring", icon: RotateCcw, show: modules.includes("tasks") },
     { href: `/t/${slug}/ideas`, label: "Idea Board", icon: Lightbulb, show: true },

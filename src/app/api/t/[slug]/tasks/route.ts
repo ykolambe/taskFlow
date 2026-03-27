@@ -85,6 +85,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "You can only assign tasks to yourself or people below you" }, { status: 403 });
     }
 
+    const dueDateObj = dueDate ? new Date(dueDate) : null;
+    if (dueDateObj && Number.isNaN(dueDateObj.getTime())) {
+      return NextResponse.json({ error: "Invalid dueDate" }, { status: 400 });
+    }
+
     const task = await prisma.task.create({
       data: {
         companyId: company.id,
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         title,
         description: description || null,
         priority: priority || "MEDIUM",
-        dueDate: dueDate ? new Date(dueDate) : null,
+        dueDate: dueDateObj,
       },
       include: {
         creator: { select: USER_SELECT },
@@ -101,6 +106,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         attachments: true,
       },
     });
+
+    // Auto-create a reminder for the assignee 2 days before the due date.
+    // This is intentionally server-side only to avoid client tampering.
+    if (dueDateObj) {
+      const now = Date.now();
+      const remindAt = new Date(dueDateObj.getTime() - 2 * 24 * 60 * 60 * 1000);
+      if (remindAt.getTime() > now) {
+        const daysUntilDue = Math.max(
+          1,
+          Math.ceil((dueDateObj.getTime() - now) / (24 * 60 * 60 * 1000))
+        );
+        await prisma.userReminder.create({
+          data: {
+            companyId: company.id,
+            userId: finalAssigneeId,
+            title: `Due in ${daysUntilDue} days`,
+            note: `${title}\nDue date: ${dueDateObj.toISOString()}`,
+            remindAt,
+          },
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, data: task });
   } catch (err) {

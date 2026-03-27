@@ -42,6 +42,8 @@ model Company {
   taskStatuses     TaskStatusConfig[]
   billing          CompanyBilling?
   userReminders    UserReminder[]
+  channels         Channel[]
+  channelMessages  ChannelMessage[]
 
   @@map("companies")
 }
@@ -58,6 +60,7 @@ model RoleLevel {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   users   User[]
+  channels Channel[]
 
   @@unique([companyId, level])
   @@unique([companyId, name])
@@ -80,6 +83,7 @@ model User {
   bio          String?
   phone        String?
   isSuperAdmin Boolean  @default(false)
+  aiLeaderQaEnabled Boolean @default(false)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -98,6 +102,7 @@ model User {
   taskComments       TaskComment[]
   ideas              Idea[]
   userReminders      UserReminder[]
+  channelMessages    ChannelMessage[]
 
   @@unique([email, companyId])
   @@unique([username, companyId])
@@ -278,6 +283,49 @@ model TaskComment {
   @@map("task_comments")
 }
 
+// ─── Team Chat Channels ───────────────────────────────────────────────────────
+
+model Channel {
+  id          String   @id @default(cuid())
+  companyId   String
+  slug        String
+  name        String
+  type        ChannelType @default(GLOBAL) // GLOBAL | ROLE | CUSTOM
+  roleLevelId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleLevel RoleLevel?      @relation(fields: [roleLevelId], references: [id])
+  messages ChannelMessage[]
+
+  @@unique([companyId, slug])
+  @@map("channels")
+}
+
+model ChannelMessage {
+  id        String   @id @default(cuid())
+  companyId String
+  channelId String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, channelId, createdAt])
+  @@map("channel_messages")
+}
+
+enum ChannelType {
+  GLOBAL
+  ROLE
+  CUSTOM
+}
+
 // ─── Ideas (Brain Dump Board) ────────────────────────────────────────────────
 
 model Idea {
@@ -344,6 +392,8 @@ model CompanyBilling {
   companyId          String    @unique
   plan               String    @default("FREE")    // FREE | STARTER | PRO | ENTERPRISE
   pricePerSeat       Float?                         // null = use platform default
+  aiAddonEnabled     Boolean   @default(false)
+  aiPricePerSeat     Float?
   seatsLimit         Int?                           // null = unlimited
   billingEmail       String?
   notes              String?

@@ -43,6 +43,8 @@ export default async function CompanyDetailPage({
           id: company.billing.id,
           plan: company.billing.plan,
           pricePerSeat: company.billing.pricePerSeat,
+          aiAddonEnabled: company.billing.aiAddonEnabled,
+          aiPricePerSeat: company.billing.aiPricePerSeat,
           seatsLimit: company.billing.seatsLimit,
           billingEmail: company.billing.billingEmail,
           notes: company.billing.notes,

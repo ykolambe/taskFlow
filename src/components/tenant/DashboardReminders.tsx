@@ -14,6 +14,7 @@ export interface ReminderRow {
   note: string | null;
   remindAt: string;
   isDone: boolean;
+  createdAt: string;
 }
 
 interface Props {
@@ -70,13 +71,14 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
     return () => clearInterval(id);
   }, [items]);
 
-  const mapRows = (raw: { id: string; title: string; note: string | null; remindAt: string; isDone: boolean }[]): ReminderRow[] =>
+  const mapRows = (raw: { id: string; title: string; note: string | null; remindAt: string; isDone: boolean; createdAt: string }[]): ReminderRow[] =>
     raw.map((r) => ({
       id: r.id,
       title: r.title,
       note: r.note,
       remindAt: typeof r.remindAt === "string" ? r.remindAt : new Date(r.remindAt).toISOString(),
       isDone: r.isDone,
+      createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date(r.createdAt).toISOString(),
     }));
 
   const sync = async () => {
@@ -164,7 +166,7 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
 
   const upcoming = useMemo(() => {
     const active = items.filter((x) => !x.isDone);
-    return [...active].sort((a, b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+    return [...active].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [items]);
 
   const overdue = useMemo(
@@ -262,7 +264,7 @@ function ReminderLine({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 px-5 py-3">
+    <div className={cn("flex items-start gap-3 px-5 py-3", urgencyClass(r.remindAt, overdue))}>
       <button
         type="button"
         onClick={onToggle}
@@ -279,7 +281,7 @@ function ReminderLine({
           {r.title}
         </p>
         {r.note && <p className="text-xs text-surface-500 mt-0.5">{r.note}</p>}
-        <p className={cn("text-[11px] mt-1 flex items-center gap-1", overdue ? "text-red-400" : "text-surface-500")}>
+        <p className={cn("text-[11px] mt-1 flex items-center gap-1", dueTextClass(r.remindAt, overdue))}>
           <Clock className="w-3 h-3" />
           {formatDateTime(r.remindAt)}
         </p>
@@ -294,4 +296,24 @@ function ReminderLine({
       </button>
     </div>
   );
+}
+
+function dueTextClass(remindAtIso: string, overdue?: boolean): string {
+  if (overdue) return "text-red-400";
+  const now = Date.now();
+  const at = new Date(remindAtIso).getTime();
+  const days = (at - now) / (24 * 60 * 60 * 1000);
+  if (days <= 3) return "text-red-300";
+  if (days <= 7) return "text-amber-300";
+  return "text-surface-500";
+}
+
+function urgencyClass(remindAtIso: string, overdue?: boolean): string {
+  if (overdue) return "bg-red-500/5";
+  const now = Date.now();
+  const at = new Date(remindAtIso).getTime();
+  const days = (at - now) / (24 * 60 * 60 * 1000);
+  if (days <= 3) return "bg-red-500/5";
+  if (days <= 7) return "bg-amber-500/5";
+  return "";
 }

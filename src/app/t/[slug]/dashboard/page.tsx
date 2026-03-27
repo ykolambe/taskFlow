@@ -14,8 +14,9 @@ export default async function DashboardPage({
   const user = await getTenantUserFresh(slug);
   if (!user) redirect(`/t/${slug}/login`);
 
-  const company = await prisma.company.findUnique({ where: { slug } });
+  const company = await prisma.company.findUnique({ where: { slug }, include: { billing: true } });
   if (!company || !company.isActive) notFound();
+  const aiEnabled = Boolean(company.billing?.aiAddonEnabled);
 
   // Get visible subordinate IDs (users below in hierarchy)
   const allUsers = await prisma.user.findMany({
@@ -31,6 +32,8 @@ export default async function DashboardPage({
 
   const visibleIds = getSubtreeIds(user.userId);
   const teamAssigneeIds = visibleIds.filter((id) => id !== user.userId);
+  const viewerRow = allUsers.find((u) => u.id === user.userId);
+  const leaderQaEnabled = Boolean(viewerRow?.aiLeaderQaEnabled);
 
   const openTaskBase = {
     companyId: company.id,
@@ -124,7 +127,7 @@ export default async function DashboardPage({
   const [reminderRows, reminderOpenCount, highPriorityOpen] = await Promise.all([
     prisma.userReminder.findMany({
       where: { companyId: company.id, userId: user.userId, isDone: false },
-      orderBy: { remindAt: "asc" },
+      orderBy: { createdAt: "desc" },
       take: REMINDER_PAGE,
       skip: 0,
     }),
@@ -147,6 +150,7 @@ export default async function DashboardPage({
     note: r.note,
     remindAt: r.remindAt.toISOString(),
     isDone: r.isDone,
+    createdAt: r.createdAt.toISOString(),
   }));
 
   const directReports = allUsers.filter((u) => u.parentId === user.userId).length;
@@ -193,6 +197,8 @@ export default async function DashboardPage({
         reminders={reminders}
         remindersHasMore={remindersHasMore}
         executiveInsights={executiveInsights}
+        aiEnabled={aiEnabled}
+        leaderQaEnabled={leaderQaEnabled}
       />
     </TenantLayout>
   );

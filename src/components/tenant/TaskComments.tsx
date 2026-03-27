@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { MessageCircle, Send, Trash2, Pencil, X, Check } from "lucide-react";
+import { MessageCircle, Send, Trash2, Pencil, X, Check, AtSign } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { TaskComment } from "@/types";
 import { TenantTokenPayload } from "@/lib/auth";
@@ -23,6 +23,7 @@ export default function TaskComments({ taskId, slug, user }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const apiBase = `/api/t/${slug}/tasks/${taskId}/comments`;
 
@@ -35,6 +36,12 @@ export default function TaskComments({ taskId, slug, user }: Props) {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [apiBase]);
+
+  // Scroll to bottom whenever comments change
+  useEffect(() => {
+    if (!listRef.current) return;
+    listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [comments.length]);
 
   // ── Submit comment ─────────────────────────────────────────────────────────
 
@@ -161,9 +168,9 @@ export default function TaskComments({ taskId, slug, user }: Props) {
 
       {/* Comment list */}
       {comments.length === 0 ? (
-        <p className="text-xs text-surface-600 italic py-1">No comments yet. Be the first!</p>
+        <p className="text-xs text-surface-600 italic py-1">No comments yet. Leave the first update for your team.</p>
       ) : (
-        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+        <div ref={listRef} className="space-y-3 max-h-64 overflow-y-auto pr-1">
           {comments.map((comment) => {
             const isOwn = comment.authorId === user.userId;
             const isEditing = editingId === comment.id;
@@ -272,7 +279,7 @@ export default function TaskComments({ taskId, slug, user }: Props) {
                 if (body.trim()) handleSubmit(e as unknown as React.FormEvent);
               }
             }}
-            placeholder="Add a comment… (⌘↵ to send)"
+            placeholder="Add a comment… (mention with @name, ⌘↵ to send)"
             rows={1}
             maxLength={2000}
             className={cn(
@@ -282,18 +289,23 @@ export default function TaskComments({ taskId, slug, user }: Props) {
             )}
             style={{ minHeight: "36px" }}
           />
-          <button
-            type="submit"
-            disabled={!body.trim() || submitting}
-            className={cn(
-              "absolute right-2 bottom-2 transition-all",
-              body.trim() && !submitting
-                ? "text-primary-400 hover:text-primary-300"
-                : "text-surface-600 cursor-default"
-            )}
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
+          <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
+            <span className="hidden sm:inline text-[9px] text-surface-500 mr-1">
+              ⌘↵ to send
+            </span>
+            <button
+              type="submit"
+              disabled={!body.trim() || submitting}
+              className={cn(
+                "transition-all rounded-full p-1",
+                body.trim() && !submitting
+                  ? "text-primary-400 hover:text-primary-300 bg-primary-500/10"
+                  : "text-surface-600 cursor-default"
+              )}
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </form>
     </div>

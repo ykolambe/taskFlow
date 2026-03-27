@@ -51,6 +51,7 @@ export interface User {
   lastName: string;
   avatarUrl: string | null;
   isSuperAdmin: boolean;
+  aiLeaderQaEnabled?: boolean;
   isActive: boolean;
   createdAt: string;
   roleLevel: RoleLevel;
