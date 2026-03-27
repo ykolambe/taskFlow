@@ -1,6 +1,7 @@
 node_modules
 .env
 .next
+.next/dev/cache/
 # Next.js
 
 out/
