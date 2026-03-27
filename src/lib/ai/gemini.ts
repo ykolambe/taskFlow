@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { resolveSecretRef } from "@/lib/secrets";
 
 const geminiResponseSchema = z.object({
   candidates: z
@@ -18,6 +20,8 @@ export interface GeminiGenerateOptions {
   model?: string;
   timeoutMs?: number;
   retries?: number;
+  companyId?: string;
+  endpointTag?: string;
 }
 
 function extractJsonLikeText(raw: string): string {
@@ -29,12 +33,48 @@ function extractJsonLikeText(raw: string): string {
 }
 
 export async function generateGeminiJson<T>(options: GeminiGenerateOptions): Promise<T> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is missing");
-  }
+  let apiKey = process.env.GEMINI_API_KEY ?? null;
+  let model = options.model ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  let provider = "gemini";
 
-  const model = options.model ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  if (options.companyId) {
+    const infra = await prisma.tenantInfraConfig.findUnique({
+      where: { companyId: options.companyId },
+      select: {
+        aiProvider: true,
+        aiModel: true,
+        aiApiKeySecretRef: true,
+        aiRequestBudgetDaily: true,
+        aiRequestCountDaily: true,
+        aiBudgetResetAt: true,
+      },
+    });
+    if (infra) {
+      provider = infra.aiProvider ?? provider;
+      model = options.model ?? infra.aiModel ?? model;
+      const keyFromRef = resolveSecretRef(infra.aiApiKeySecretRef);
+      apiKey = keyFromRef ?? apiKey;
+
+      const now = new Date();
+      const needsReset = !infra.aiBudgetResetAt || infra.aiBudgetResetAt <= now;
+      if (needsReset) {
+        const resetAt = new Date(now);
+        resetAt.setUTCHours(24, 0, 0, 0);
+        await prisma.tenantInfraConfig.update({
+          where: { companyId: options.companyId },
+          data: { aiRequestCountDaily: 0, aiBudgetResetAt: resetAt },
+        });
+      } else if (
+        infra.aiRequestBudgetDaily !== null &&
+        infra.aiRequestBudgetDaily !== undefined &&
+        infra.aiRequestCountDaily >= infra.aiRequestBudgetDaily
+      ) {
+        throw new Error("Tenant AI daily request budget exceeded");
+      }
+    }
+  }
+  if (!apiKey) throw new Error("Tenant AI API key is missing");
+
   const timeoutMs = options.timeoutMs ?? 12000;
   const retries = options.retries ?? 1;
 
@@ -74,7 +114,24 @@ export async function generateGeminiJson<T>(options: GeminiGenerateOptions): Pro
           .trim() ?? "";
 
       if (!text) throw new Error("Gemini returned empty response");
-      return JSON.parse(extractJsonLikeText(text)) as T;
+      const parsed = JSON.parse(extractJsonLikeText(text)) as T;
+      if (options.companyId) {
+        await prisma.$transaction([
+          prisma.tenantInfraConfig.updateMany({
+            where: { companyId: options.companyId },
+            data: { aiRequestCountDaily: { increment: 1 } },
+          }),
+          prisma.tenantAiUsageLog.create({
+            data: {
+              companyId: options.companyId,
+              endpoint: options.endpointTag ?? "generic",
+              provider,
+              model,
+            },
+          }),
+        ]);
+      }
+      return parsed;
     } catch (err) {
       lastError = err;
       if (attempt >= retries) break;

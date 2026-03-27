@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
+import { authSessionCookieOptions } from "@/lib/authCookies";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -46,13 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     });
 
     const res = NextResponse.json({ success: true, firstName: user.firstName, lastName: user.lastName });
-    res.cookies.set(`tenant_${slug}_token`, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    res.cookies.set(`tenant_${slug}_token`, token, authSessionCookieOptions(req));
 
     return res;
   } catch (err) {

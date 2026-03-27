@@ -24,6 +24,7 @@ export default function PlatformLoginPage() {
     try {
       const res = await fetch("/api/platform/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });

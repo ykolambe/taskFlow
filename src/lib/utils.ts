@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format, formatDistanceToNow, isToday, isTomorrow, isPast } from "date-fns";
+import { format, formatDistanceToNow, isToday, isTomorrow, isPast, endOfDay } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -8,9 +8,21 @@ export function cn(...inputs: ClassValue[]) {
 
 // ─── Date Helpers ─────────────────────────────────────────────────────────
 
+function parseAppDate(date: Date | string): Date {
+  if (date instanceof Date) return date;
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const monthIndex = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return new Date(year, monthIndex, day);
+  }
+  return new Date(date);
+}
+
 export function formatDate(date: Date | string | null): string {
   if (!date) return "—";
-  const d = new Date(date);
+  const d = parseAppDate(date);
   if (isToday(d)) return "Today";
   if (isTomorrow(d)) return "Tomorrow";
   return format(d, "MMM d, yyyy");
@@ -18,17 +30,18 @@ export function formatDate(date: Date | string | null): string {
 
 export function formatDateTime(date: Date | string | null): string {
   if (!date) return "—";
-  return format(new Date(date), "MMM d, yyyy 'at' h:mm a");
+  return format(parseAppDate(date), "MMM d, yyyy 'at' h:mm a");
 }
 
 export function formatRelative(date: Date | string | null): string {
   if (!date) return "—";
-  return formatDistanceToNow(new Date(date), { addSuffix: true });
+  return formatDistanceToNow(parseAppDate(date), { addSuffix: true });
 }
 
 export function isOverdue(date: Date | string | null): boolean {
   if (!date) return false;
-  return isPast(new Date(date));
+  // For due dates without times, treat end of local day as deadline.
+  return isPast(endOfDay(parseAppDate(date)));
 }
 
 // ─── String Helpers ───────────────────────────────────────────────────────

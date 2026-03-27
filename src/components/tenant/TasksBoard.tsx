@@ -61,6 +61,9 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
   );
   const [showNewTask, setShowNewTask] = useState(openNew || false);
   const [view, setView] = useState<"board" | "list">("list");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // New task form
   const [newTask, setNewTask] = useState({ title: "", description: "", assigneeId: user.userId, priority: "MEDIUM" as Priority, dueDate: "" });
@@ -84,6 +87,63 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
 
   const myTasks = filteredTasks.filter((t) => t.assigneeId === user.userId);
   const teamTasks = filteredTasks.filter((t) => t.assigneeId !== user.userId);
+
+  const toggleSelectTask = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const clearBulkSelection = () => {
+    setSelectedTaskIds(new Set());
+    setBulkMode(false);
+  };
+
+  const selectAllVisible = () => {
+    setSelectedTaskIds(new Set(filteredTasks.map((t) => t.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTaskIds.size === 0) return;
+    if (!confirm(`Delete ${selectedTaskIds.size} selected task(s)?`)) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedTaskIds);
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          fetch(`/api/t/${slug}/tasks/${id}`, { method: "DELETE" }).then(async (res) => {
+            if (!res.ok) {
+              const j = await res.json().catch(() => null);
+              throw new Error(j?.error || "Failed");
+            }
+            return id;
+          })
+        )
+      );
+      const okIds = results
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+        .map((r) => r.value);
+      const failCount = results.length - okIds.length;
+
+      if (okIds.length > 0) {
+        const okSet = new Set(okIds);
+        setTasks((prev) => prev.filter((t) => !okSet.has(t.id)));
+      }
+      setSelectedTaskIds(new Set());
+      if (failCount === 0) {
+        toast.success(`Deleted ${okIds.length} task(s)`);
+        setBulkMode(false);
+      } else {
+        toast.error(`Deleted ${okIds.length}, failed ${failCount} (permission or missing task)`);
+      }
+      router.refresh();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const handleCreateTask = async () => {
     if (!newTask.title.trim()) { toast.error("Title is required"); return; }
@@ -225,6 +285,38 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
                 <Archive className="w-4 h-4" />
               </button>
             )}
+            {!showArchived && (
+              <>
+                <Button
+                  size="sm"
+                  variant={bulkMode ? "secondary" : "outline"}
+                  onClick={() => {
+                    if (bulkMode) clearBulkSelection();
+                    else setBulkMode(true);
+                  }}
+                >
+                  {bulkMode ? "Cancel Bulk" : "Bulk Select"}
+                </Button>
+                {bulkMode && (
+                  <>
+                    <Button size="sm" variant="secondary" onClick={selectAllVisible}>
+                      Select All Visible
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+                      loading={bulkDeleting}
+                      onClick={handleBulkDelete}
+                      disabled={selectedTaskIds.size === 0}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Selected ({selectedTaskIds.size})
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
             <Button onClick={() => setShowNewTask(true)} size="sm">
               <Plus className="w-4 h-4" /> New Task
             </Button>
@@ -316,8 +408,11 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
             teamTasks={teamTasks}
             currentUser={user}
             statusConfigs={statusConfigs}
-            onTaskClick={setSelectedTask}
+            onTaskClick={(task) => (bulkMode ? toggleSelectTask(task.id) : setSelectedTask(task))}
             onStatusChange={handleStatusChange}
+            bulkMode={bulkMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelect={toggleSelectTask}
           />
         )}
       </div>
@@ -335,6 +430,10 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
             onTaskUpdate={(updated) => {
               setSelectedTask(updated);
               setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+            }}
+            onTaskDelete={(taskId) => {
+              setTasks((prev) => prev.filter((t) => t.id !== taskId));
+              setSelectedTask(null);
             }}
           />
         )}
@@ -381,7 +480,7 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
           >
             {assignableUsers.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.firstName} {u.lastName} {u.id === user.userId ? "(me)" : ""} — {u.roleLevel.name}
+                {u.firstName} {u.lastName} {u.id === user.userId ? "(me)" : ""} — {u.roleLevel?.name ?? "No Role"}
               </option>
             ))}
           </Select>
@@ -402,6 +501,9 @@ function TaskList({
   statusConfigs,
   onTaskClick,
   onStatusChange,
+  bulkMode,
+  selectedTaskIds,
+  onToggleSelect,
 }: {
   myTasks: Task[];
   teamTasks: Task[];
@@ -409,6 +511,9 @@ function TaskList({
   statusConfigs: StatusConfig[];
   onTaskClick: (task: Task) => void;
   onStatusChange: (id: string, status: string) => void;
+  bulkMode: boolean;
+  selectedTaskIds: Set<string>;
+  onToggleSelect: (id: string) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -429,6 +534,9 @@ function TaskList({
                 statusConfigs={statusConfigs}
                 onClick={() => onTaskClick(task)}
                 onStatusChange={onStatusChange}
+                bulkMode={bulkMode}
+                isSelected={selectedTaskIds.has(task.id)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
           </div>
@@ -450,6 +558,9 @@ function TaskList({
                 statusConfigs={statusConfigs}
                 onClick={() => onTaskClick(task)}
                 onStatusChange={onStatusChange}
+                bulkMode={bulkMode}
+                isSelected={selectedTaskIds.has(task.id)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
           </div>
@@ -756,12 +867,18 @@ function TaskCard({
   statusConfigs,
   onClick,
   onStatusChange,
+  bulkMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: {
   task: Task;
   currentUser: TenantTokenPayload;
   statusConfigs: StatusConfig[];
   onClick: () => void;
   onStatusChange: (id: string, status: string) => void;
+  bulkMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const doneKeys = statusConfigs.filter((s) => s.type === "DONE").map((s) => s.key);
   const reviewKeys = statusConfigs.filter((s) => s.type === "REVIEW").map((s) => s.key);
@@ -794,6 +911,7 @@ function TaskCard({
     <div
       className={cn(
         "border-l-4 bg-surface-800 border border-surface-700 rounded-xl p-4 hover:border-surface-600 transition-all cursor-pointer group",
+        bulkMode && isSelected ? "ring-1 ring-primary-500/60 border-primary-500/50" : "",
         overdue ? "border-red-500/40 bg-red-500/5" : "",
         isReview && !overdue ? "border-amber-500/30 bg-amber-500/5" : ""
       )}
@@ -813,6 +931,24 @@ function TaskCard({
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
+        {bulkMode && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.(task.id);
+            }}
+            className={cn(
+              "mt-0.5 w-5 h-5 rounded border flex items-center justify-center text-[10px] font-bold",
+              isSelected
+                ? "bg-primary-500/30 border-primary-500/60 text-primary-200"
+                : "border-surface-600 text-surface-500"
+            )}
+            title={isSelected ? "Deselect" : "Select"}
+          >
+            {isSelected ? "✓" : ""}
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <p className={cn("text-sm font-medium truncate", overdue ? "text-red-400" : "text-surface-100")}>
             {task.title}
@@ -1053,6 +1189,7 @@ function TaskDetail({
   onStatusChange,
   onClose,
   onTaskUpdate,
+  onTaskDelete,
 }: {
   task: Task;
   user: TenantTokenPayload;
@@ -1061,7 +1198,9 @@ function TaskDetail({
   onStatusChange: (s: string) => void;
   onClose: () => void;
   onTaskUpdate: (t: Task) => void;
+  onTaskDelete: (taskId: string) => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
   const isAssignee = task.assigneeId === user.userId;
   const isCreator = task.creatorId === user.userId;
   const creatorRoleLevel = task.creator.roleLevel?.level ?? 0;
@@ -1080,6 +1219,26 @@ function TaskDetail({
   const currentConfig = statusConfigs[currentIdx];
   const doneKeys = statusConfigs.filter((s) => s.type === "DONE").map((s) => s.key);
   const nextConfigs = statusConfigs.slice(currentIdx + 1);
+  const canDelete = isCreator || user.isSuperAdmin;
+
+  const handleDeleteTask = async () => {
+    if (!canDelete) return;
+    if (!confirm("Delete this task permanently? This action cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/tasks/${task.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to delete task");
+        return;
+      }
+      toast.success("Task deleted");
+      onTaskDelete(task.id);
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -1214,6 +1373,18 @@ function TaskDetail({
             ✓ Mark Complete
           </Button>
         ))}
+        {canDelete && (
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={deleting}
+            onClick={handleDeleteTask}
+            className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete Task
+          </Button>
+        )}
       </div>
 
       {/* Divider */}

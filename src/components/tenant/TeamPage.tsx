@@ -47,6 +47,9 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
   const [showPassword, setShowPassword] = useState(false);
   const [regenLoading, setRegenLoading] = useState(false);
   const [updatingQaAccess, setUpdatingQaAccess] = useState(false);
+  const [updatingSuperAdmin, setUpdatingSuperAdmin] = useState(false);
+  const [savingRoleLevel, setSavingRoleLevel] = useState(false);
+  const [selectedRoleLevelId, setSelectedRoleLevelId] = useState<string>("");
   const [memberListPage, setMemberListPage] = useState(1);
   const MEMBER_PAGE_SIZE = 40;
 
@@ -189,6 +192,55 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
     }
   };
 
+  const handleToggleSuperAdmin = async (targetUser: User) => {
+    if (!currentUser.isSuperAdmin) return;
+    setUpdatingSuperAdmin(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/users/${targetUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isSuperAdmin: !targetUser.isSuperAdmin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update super admin");
+        return;
+      }
+      const next = Boolean(data.data?.isSuperAdmin);
+      setSelectedUser((prev) => (prev ? { ...prev, isSuperAdmin: next } : prev));
+      toast.success(next ? "Super admin enabled" : "Super admin disabled");
+      router.refresh();
+    } finally {
+      setUpdatingSuperAdmin(false);
+    }
+  };
+
+  const handleSaveRoleLevel = async (targetUser: User) => {
+    if (!currentUser.isSuperAdmin) return;
+    setSavingRoleLevel(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/users/${targetUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleLevelId: selectedRoleLevelId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update role level");
+        return;
+      }
+      setSelectedUser((prev) =>
+        prev
+          ? { ...prev, roleLevelId: data.data?.roleLevelId ?? null, roleLevel: data.data?.roleLevel ?? null }
+          : prev
+      );
+      toast.success("Role level updated");
+      router.refresh();
+    } finally {
+      setSavingRoleLevel(false);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -252,6 +304,7 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
                     roleColor={rl.color}
                     onClick={async () => {
                       setSelectedUser(u);
+                      setSelectedRoleLevelId(u.roleLevelId ?? "");
                       setSelectedStats(null);
                       await fetchUserStats(u.id);
                     }}
@@ -295,15 +348,15 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
           <Select label="Role Level" value={newMember.roleLevelId} onChange={(e) => setNewMember({ ...newMember, roleLevelId: e.target.value })} required>
             <option value="">Select level...</option>
             {roleLevels
-              .filter((rl) => rl.level > currentUser.level) // Can only add below themselves
+              .filter((rl) => (currentUser.isSuperAdmin ? true : rl.level > currentUser.level)) // Super admin can assign any level
               .map((rl) => <option key={rl.id} value={rl.id}>{rl.name}</option>)}
           </Select>
           <Select label="Reports To" value={newMember.parentId} onChange={(e) => setNewMember({ ...newMember, parentId: e.target.value })}>
             {users
-              .filter((u) => u.roleLevel.level < (roleLevels.find((r) => r.id === newMember.roleLevelId)?.level ?? 999))
+              .filter((u) => (u.roleLevel?.level ?? 0) < (roleLevels.find((r) => r.id === newMember.roleLevelId)?.level ?? 999))
               .map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.firstName} {u.lastName} — {u.roleLevel.name}
+                  {u.firstName} {u.lastName} — {u.roleLevel?.name ?? "No Role"}
                   {u.id === currentUser.userId ? " (me)" : ""}
                 </option>
               ))}
@@ -338,13 +391,14 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
             <div
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full"
               style={{
-                backgroundColor: selectedUser.roleLevel.color + "20",
-                color: selectedUser.roleLevel.color,
-                borderColor: selectedUser.roleLevel.color + "40",
-                border: "1px solid",
+                backgroundColor: (selectedUser.roleLevel?.color ?? "#64748b") + "20",
+                color: selectedUser.roleLevel?.color ?? "#64748b",
+                borderColor: (selectedUser.roleLevel?.color ?? "#64748b") + "40",
+                borderWidth: "1px",
+                borderStyle: "solid",
               }}
             >
-              {selectedUser.roleLevel.name}
+              {selectedUser.roleLevel?.name ?? "No Role"}
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-surface-750 rounded-xl p-3">
@@ -403,6 +457,35 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
 
             {currentUser.isSuperAdmin && (
               <div className="space-y-2">
+                <div className="bg-surface-800 border border-surface-700 rounded-xl p-3 space-y-2 text-left">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Role & Access</p>
+                  <Select label="Role Level" value={selectedRoleLevelId} onChange={(e) => setSelectedRoleLevelId(e.target.value)}>
+                    <option value="">No Role</option>
+                    {roleLevels.map((rl) => (
+                      <option key={rl.id} value={rl.id}>
+                        {rl.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={savingRoleLevel}
+                    onClick={() => handleSaveRoleLevel(selectedUser)}
+                    className="w-full"
+                  >
+                    Save Role Level
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedUser.isSuperAdmin ? "outline" : "secondary"}
+                    loading={updatingSuperAdmin}
+                    onClick={() => handleToggleSuperAdmin(selectedUser)}
+                    className="w-full"
+                  >
+                    {selectedUser.isSuperAdmin ? "Remove Super Admin" : "Make Super Admin"}
+                  </Button>
+                </div>
                 <Button
                   size="sm"
                   variant="secondary"

@@ -270,6 +270,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       responseSchema: executiveBriefJsonSchema as unknown as Record<string, unknown>,
       timeoutMs: 12000,
       retries: 1,
+      companyId: company.id,
+      endpointTag: "executive-brief",
     });
     brief = briefSchema.parse(generated);
   } catch (error) {

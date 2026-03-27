@@ -9,13 +9,14 @@ import toast from "react-hot-toast";
 
 interface Props {
   orgTree: OrgNode[];
+  superAdmins?: OrgNode[];
   currentUserId: string;
   companyName: string;
   companyLogoUrl?: string | null;
   slug: string;
 }
 
-export default function OrgChart({ orgTree, currentUserId, companyName, companyLogoUrl, slug }: Props) {
+export default function OrgChart({ orgTree, superAdmins = [], currentUserId, companyName, companyLogoUrl, slug }: Props) {
   const [zoom, setZoom] = useState(1);
   const [selected, setSelected] = useState<OrgNode | null>(null);
   const [stats, setStats] = useState<{
@@ -132,25 +133,51 @@ export default function OrgChart({ orgTree, currentUserId, companyName, companyL
         >
           {orgTree.length > 0 && (
             <div className="flex flex-col items-center w-full mb-0">
-              <div className="inline-flex flex-col items-center rounded-2xl border-2 border-primary-500/40 bg-gradient-to-b from-surface-800 to-surface-850 px-5 py-4 shadow-lg shadow-primary-900/20 min-w-[160px] max-w-[280px]">
-                <div className="relative mb-3">
-                  {companyLogoUrl ? (
-                    <img
-                      src={companyLogoUrl}
-                      alt=""
-                      className="w-16 h-16 rounded-xl object-cover border border-surface-600 bg-surface-900"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-2xl shadow-inner border border-primary-400/30">
-                      {companyName.charAt(0).toUpperCase()}
+              <div className="flex items-start justify-center gap-6 mb-2">
+                <div className="inline-flex flex-col items-center rounded-2xl border-2 border-primary-500/40 bg-gradient-to-b from-surface-800 to-surface-850 px-5 py-4 shadow-lg shadow-primary-900/20 min-w-[160px] max-w-[280px]">
+                  <div className="relative mb-3">
+                    {companyLogoUrl ? (
+                      <img
+                        src={companyLogoUrl}
+                        alt=""
+                        className="w-16 h-16 rounded-xl object-cover border border-surface-600 bg-surface-900"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-2xl shadow-inner border border-primary-400/30">
+                        {companyName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-lg bg-surface-800 border border-surface-600 flex items-center justify-center">
+                      <Building2 className="w-3.5 h-3.5 text-primary-400" />
                     </div>
-                  )}
-                  <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-lg bg-surface-800 border border-surface-600 flex items-center justify-center">
-                    <Building2 className="w-3.5 h-3.5 text-primary-400" />
                   </div>
+                  <p className="text-sm font-bold text-surface-100 text-center leading-tight tracking-tight">{companyName}</p>
+                  <p className="text-[10px] text-surface-500 mt-1 uppercase tracking-widest">Organization</p>
                 </div>
-                <p className="text-sm font-bold text-surface-100 text-center leading-tight tracking-tight">{companyName}</p>
-                <p className="text-[10px] text-surface-500 mt-1 uppercase tracking-widest">Organization</p>
+                {superAdmins.length > 0 && (
+                  <div className="min-w-[180px] max-w-[240px] rounded-xl border border-surface-700 bg-surface-800/70 p-3">
+                    <p className="text-[10px] uppercase tracking-widest text-surface-500 mb-2">Super Admins</p>
+                    <div className="space-y-2">
+                      {superAdmins.map((admin) => (
+                        <button
+                          key={admin.id}
+                          type="button"
+                          onClick={() => setSelected(admin)}
+                          className="w-full flex items-center gap-2 rounded-lg border border-surface-700 bg-surface-800 px-2 py-1.5 hover:border-primary-500/50 transition-all text-left"
+                        >
+                          <Avatar firstName={admin.firstName} lastName={admin.lastName} avatarUrl={admin.avatarUrl} size="xs" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-surface-100 truncate">
+                              {admin.firstName} {admin.lastName}
+                            </p>
+                            <p className="text-[10px] text-surface-500 truncate">{admin.roleLevel.name}</p>
+                          </div>
+                          <Shield className="w-3 h-3 text-primary-400 flex-shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="h-5 w-px bg-surface-600 flex-shrink-0" aria-hidden />
             </div>

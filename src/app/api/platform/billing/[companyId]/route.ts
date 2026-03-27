@@ -49,6 +49,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       pricePerSeat,
       aiAddonEnabled,
       aiPricePerSeat,
+      chatAddonEnabled,
+      chatPricePerSeat,
+      recurringAddonEnabled,
+      recurringPricePerSeat,
       seatsLimit,
       billingEmail,
       notes,
@@ -69,6 +73,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(aiPricePerSeat !== undefined && {
           aiPricePerSeat: aiPricePerSeat === null || aiPricePerSeat === "" ? null : Number(aiPricePerSeat),
         }),
+        ...(chatAddonEnabled !== undefined && { chatAddonEnabled: Boolean(chatAddonEnabled) }),
+        ...(chatPricePerSeat !== undefined && {
+          chatPricePerSeat: chatPricePerSeat === null || chatPricePerSeat === "" ? null : Number(chatPricePerSeat),
+        }),
+        ...(recurringAddonEnabled !== undefined && { recurringAddonEnabled: Boolean(recurringAddonEnabled) }),
+        ...(recurringPricePerSeat !== undefined && {
+          recurringPricePerSeat: recurringPricePerSeat === null || recurringPricePerSeat === "" ? null : Number(recurringPricePerSeat),
+        }),
         ...(seatsLimit !== undefined && {
           seatsLimit: seatsLimit === null || seatsLimit === "" ? null : Number(seatsLimit),
         }),
@@ -86,6 +98,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         pricePerSeat: pricePerSeat !== undefined && pricePerSeat !== "" ? Number(pricePerSeat) : null,
         aiAddonEnabled: aiAddonEnabled ?? false,
         aiPricePerSeat: aiPricePerSeat !== undefined && aiPricePerSeat !== "" ? Number(aiPricePerSeat) : null,
+        chatAddonEnabled: chatAddonEnabled ?? false,
+        chatPricePerSeat: chatPricePerSeat !== undefined && chatPricePerSeat !== "" ? Number(chatPricePerSeat) : null,
+        recurringAddonEnabled: recurringAddonEnabled ?? false,
+        recurringPricePerSeat:
+          recurringPricePerSeat !== undefined && recurringPricePerSeat !== "" ? Number(recurringPricePerSeat) : null,
         seatsLimit: seatsLimit !== undefined && seatsLimit !== "" ? Number(seatsLimit) : null,
         billingEmail: billingEmail || null,
         notes: notes || null,

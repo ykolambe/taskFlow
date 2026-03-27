@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
 type Params = { params: Promise<{ slug: string }> | { slug: string } };
 
@@ -14,6 +15,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     select: { id: true },
   });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(company.id, "chat"))) {
+    return NextResponse.json({ error: "Chat module is disabled for this tenant." }, { status: 403 });
+  }
 
   // For V1 we expose all GLOBAL channels and any ROLE channels whose roleLevel is at/above the viewer
   const viewerRow = await prisma.user.findUnique({
@@ -48,6 +52,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { id: true },
   });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(company.id, "chat"))) {
+    return NextResponse.json({ error: "Chat module is disabled for this tenant." }, { status: 403 });
+  }
 
   let body: { slug?: string; name?: string; type?: string; roleLevelId?: string | null };
   try {

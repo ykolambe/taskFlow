@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
+import { hydrateTenantPrisma, prisma, setTenantDbContext } from "@/lib/prisma";
 
 const getSecret = () =>
   new TextEncoder().encode(
@@ -80,6 +80,8 @@ export async function getTenantUser(
     if (!token) return null;
     const payload = await verifyToken(token);
     if (payload.type !== "tenant") return null;
+    setTenantDbContext({ companyId: payload.companyId, slug: payload.companySlug });
+    await hydrateTenantPrisma(payload.companyId);
     return payload;
   } catch {
     return null;

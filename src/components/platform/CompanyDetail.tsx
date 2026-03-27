@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,6 +21,10 @@ interface CompanyBilling {
   pricePerSeat: number | null;
   aiAddonEnabled: boolean;
   aiPricePerSeat: number | null;
+  chatAddonEnabled: boolean;
+  chatPricePerSeat: number | null;
+  recurringAddonEnabled: boolean;
+  recurringPricePerSeat: number | null;
   seatsLimit: number | null;
   billingEmail: string | null;
   notes: string | null;
@@ -36,10 +40,47 @@ interface Company {
   isActive: boolean;
   modules: string[];
   billing: CompanyBilling | null;
+  infraConfig: {
+    deploymentMode: "SHARED" | "DEDICATED";
+    provisioningStatus: "PENDING" | "PROVISIONING" | "READY" | "FAILED";
+    provisioningError: string | null;
+    backendBaseUrl: string | null;
+    backendIp: string | null;
+    frontendBaseUrl: string | null;
+    frontendIp: string | null;
+    dbHost: string | null;
+    dbPort: number | null;
+    dbName: string | null;
+    dbUserSecretRef: string | null;
+    dbPasswordSecretRef: string | null;
+    dbUrlSecretRef: string | null;
+    aiProvider: string | null;
+    aiModel: string | null;
+    aiApiKeySecretRef: string | null;
+    aiBaseUrl: string | null;
+    aiRequestBudgetDaily: number | null;
+  } | null;
   _count: { users: number; tasks: number; ideas?: number; recurringTasks?: number };
   roleLevels: { id: string; name: string; level: number; color: string; canApprove: boolean }[];
   users: { id: string; email: string; firstName: string; lastName: string }[];
 }
+
+type ProvisioningStepLog = {
+  at?: string;
+  step?: string;
+  status?: "started" | "success" | "skipped" | "failed" | string;
+  message?: string;
+};
+
+type ProvisioningJob = {
+  id: string;
+  action: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  payload?: { stepLogs?: ProvisioningStepLog[] } | null;
+  lastError?: string | null;
+};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -88,6 +129,10 @@ export default function CompanyDetail({ company }: { company: Company }) {
     pricePerSeat: b?.pricePerSeat !== null && b?.pricePerSeat !== undefined ? String(b.pricePerSeat) : "",
     aiAddonEnabled: b?.aiAddonEnabled ?? false,
     aiPricePerSeat: b?.aiPricePerSeat !== null && b?.aiPricePerSeat !== undefined ? String(b.aiPricePerSeat) : "",
+    chatAddonEnabled: b?.chatAddonEnabled ?? false,
+    chatPricePerSeat: b?.chatPricePerSeat !== null && b?.chatPricePerSeat !== undefined ? String(b.chatPricePerSeat) : "",
+    recurringAddonEnabled: b?.recurringAddonEnabled ?? false,
+    recurringPricePerSeat: b?.recurringPricePerSeat !== null && b?.recurringPricePerSeat !== undefined ? String(b.recurringPricePerSeat) : "",
     seatsLimit: b?.seatsLimit !== null && b?.seatsLimit !== undefined ? String(b.seatsLimit) : "",
     billingEmail: b?.billingEmail ?? "",
     notes: b?.notes ?? "",
@@ -96,6 +141,38 @@ export default function CompanyDetail({ company }: { company: Company }) {
     subscriptionStatus: b?.subscriptionStatus ?? "active",
   });
   const [savingBilling, setSavingBilling] = useState(false);
+  const [savingInfra, setSavingInfra] = useState(false);
+  const [triggeringProvision, setTriggeringProvision] = useState(false);
+  const [runningProvisioningNow, setRunningProvisioningNow] = useState(false);
+  const [rebuildingTenantDbNow, setRebuildingTenantDbNow] = useState(false);
+  const [updatingProvisioningStatus, setUpdatingProvisioningStatus] = useState(false);
+  const [provisioningStatusDraft, setProvisioningStatusDraft] = useState<
+    "PENDING" | "PROVISIONING" | "READY" | "FAILED"
+  >(company.infraConfig?.provisioningStatus ?? "PENDING");
+  const [provisioningErrorDraft, setProvisioningErrorDraft] = useState(company.infraConfig?.provisioningError ?? "");
+  const [infraForm, setInfraForm] = useState({
+    deploymentMode: company.infraConfig?.deploymentMode ?? "SHARED",
+    backendBaseUrl: company.infraConfig?.backendBaseUrl ?? "",
+    backendIp: company.infraConfig?.backendIp ?? "",
+    frontendBaseUrl: company.infraConfig?.frontendBaseUrl ?? "",
+    frontendIp: company.infraConfig?.frontendIp ?? "",
+    dbHost: company.infraConfig?.dbHost ?? "",
+    dbPort: company.infraConfig?.dbPort !== null && company.infraConfig?.dbPort !== undefined ? String(company.infraConfig.dbPort) : "",
+    dbName: company.infraConfig?.dbName ?? "",
+    dbUserSecretRef: company.infraConfig?.dbUserSecretRef ?? "",
+    dbPasswordSecretRef: company.infraConfig?.dbPasswordSecretRef ?? "",
+    dbUrlSecretRef: company.infraConfig?.dbUrlSecretRef ?? "",
+    aiProvider: company.infraConfig?.aiProvider ?? "gemini",
+    aiModel: company.infraConfig?.aiModel ?? "",
+    aiApiKeySecretRef: company.infraConfig?.aiApiKeySecretRef ?? "",
+    aiBaseUrl: company.infraConfig?.aiBaseUrl ?? "",
+    aiRequestBudgetDaily:
+      company.infraConfig?.aiRequestBudgetDaily !== null && company.infraConfig?.aiRequestBudgetDaily !== undefined
+        ? String(company.infraConfig.aiRequestBudgetDaily)
+        : "",
+  });
+  const [provisioningJobs, setProvisioningJobs] = useState<ProvisioningJob[]>([]);
+  const [loadingProvisioningJobs, setLoadingProvisioningJobs] = useState(false);
 
   // ── Settings handlers ──
 
@@ -166,6 +243,10 @@ export default function CompanyDetail({ company }: { company: Company }) {
           pricePerSeat: billingForm.pricePerSeat === "" ? null : Number(billingForm.pricePerSeat),
           aiAddonEnabled: billingForm.aiAddonEnabled,
           aiPricePerSeat: billingForm.aiPricePerSeat === "" ? null : Number(billingForm.aiPricePerSeat),
+          chatAddonEnabled: billingForm.chatAddonEnabled,
+          chatPricePerSeat: billingForm.chatPricePerSeat === "" ? null : Number(billingForm.chatPricePerSeat),
+          recurringAddonEnabled: billingForm.recurringAddonEnabled,
+          recurringPricePerSeat: billingForm.recurringPricePerSeat === "" ? null : Number(billingForm.recurringPricePerSeat),
           seatsLimit: billingForm.seatsLimit === "" ? null : Number(billingForm.seatsLimit),
           billingEmail: billingForm.billingEmail || null,
           notes: billingForm.notes || null,
@@ -192,6 +273,170 @@ export default function CompanyDetail({ company }: { company: Company }) {
       setSavingBilling(false);
     }
   };
+
+  const handleSaveInfra = async () => {
+    setSavingInfra(true);
+    try {
+      const res = await fetch(`/api/platform/companies/${company.id}/infra`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deploymentMode: infraForm.deploymentMode,
+          backendBaseUrl: infraForm.backendBaseUrl || null,
+          backendIp: infraForm.backendIp || null,
+          frontendBaseUrl: infraForm.frontendBaseUrl || null,
+          frontendIp: infraForm.frontendIp || null,
+          dbHost: infraForm.dbHost || null,
+          dbPort: infraForm.dbPort ? Number(infraForm.dbPort) : null,
+          dbName: infraForm.dbName || null,
+          dbUserSecretRef: infraForm.dbUserSecretRef || null,
+          dbPasswordSecretRef: infraForm.dbPasswordSecretRef || null,
+          dbUrlSecretRef: infraForm.dbUrlSecretRef || null,
+          aiProvider: infraForm.aiProvider || null,
+          aiModel: infraForm.aiModel || null,
+          aiApiKeySecretRef: infraForm.aiApiKeySecretRef || null,
+          aiBaseUrl: infraForm.aiBaseUrl || null,
+          aiRequestBudgetDaily: infraForm.aiRequestBudgetDaily ? Number(infraForm.aiRequestBudgetDaily) : null,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Infrastructure config saved");
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to save infra config");
+      }
+    } finally {
+      setSavingInfra(false);
+    }
+  };
+
+  const handleTriggerProvision = async () => {
+    setTriggeringProvision(true);
+    try {
+      const idempotencyKey = `company-${company.id}-${Date.now()}`;
+      const res = await fetch(`/api/platform/companies/${company.id}/provisioning`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "PROVISION", idempotencyKey }),
+      });
+      if (res.ok) {
+        toast.success("Provisioning queued");
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to queue provisioning");
+      }
+    } finally {
+      setTriggeringProvision(false);
+    }
+  };
+
+  const handleUpdateProvisioningStatus = async () => {
+    setUpdatingProvisioningStatus(true);
+    try {
+      const res = await fetch(`/api/platform/companies/${company.id}/provisioning/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: provisioningStatusDraft,
+          error: provisioningErrorDraft.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Provisioning status updated");
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to update provisioning status");
+      }
+    } finally {
+      setUpdatingProvisioningStatus(false);
+    }
+  };
+
+  const handleRunProvisioningNow = async () => {
+    setRunningProvisioningNow(true);
+    try {
+      const res = await fetch(`/api/platform/provisioning/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 10 }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        const processed = Number(data?.processed ?? 0);
+        toast.success(processed > 0 ? `Provisioning ran (${processed} job${processed > 1 ? "s" : ""})` : "No pending provisioning jobs");
+        await loadProvisioningJobs();
+        router.refresh();
+      } else {
+        toast.error(data?.error || "Failed to run provisioning");
+      }
+    } finally {
+      setRunningProvisioningNow(false);
+    }
+  };
+
+  const handleRebuildTenantDbNow = async () => {
+    setRebuildingTenantDbNow(true);
+    try {
+      const idempotencyKey = `rebuild-db-${company.id}-${Date.now()}`;
+      const queueRes = await fetch(`/api/platform/companies/${company.id}/provisioning`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REPROVISION",
+          idempotencyKey,
+          payload: { forceDbBootstrap: true },
+        }),
+      });
+      const queueJson = await queueRes.json().catch(() => null);
+      if (!queueRes.ok) {
+        toast.error(queueJson?.error || "Failed to queue DB rebuild");
+        return;
+      }
+
+      const runRes = await fetch(`/api/platform/provisioning/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 10 }),
+      });
+      const runJson = await runRes.json().catch(() => null);
+      if (!runRes.ok) {
+        toast.error(runJson?.error || "DB rebuild queued, but run failed");
+        await loadProvisioningJobs();
+        router.refresh();
+        return;
+      }
+
+      const processed = Number(runJson?.processed ?? 0);
+      toast.success(processed > 0 ? "Tenant DB rebuild started" : "DB rebuild queued");
+      await loadProvisioningJobs();
+      router.refresh();
+    } finally {
+      setRebuildingTenantDbNow(false);
+    }
+  };
+
+  const loadProvisioningJobs = async () => {
+    setLoadingProvisioningJobs(true);
+    try {
+      const res = await fetch(`/api/platform/companies/${company.id}/provisioning`, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(json?.error || "Failed to load provisioning timeline");
+        return;
+      }
+      setProvisioningJobs(Array.isArray(json?.data?.jobs) ? (json.data.jobs as ProvisioningJob[]) : []);
+    } finally {
+      setLoadingProvisioningJobs(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadProvisioningJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.id]);
 
   const superAdmin = company.users[0];
   const seats = company._count.users;
@@ -318,7 +563,7 @@ export default function CompanyDetail({ company }: { company: Company }) {
               <div>
                 <p className="text-sm font-medium text-surface-200 mb-2">Modules</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {["tasks", "team", "org", "approvals"].map((mod) => (
+                  {["tasks", "team", "org", "approvals", "chat", "recurring"].map((mod) => (
                     <button
                       key={mod}
                       onClick={() => toggleModule(mod)}
@@ -368,6 +613,156 @@ export default function CompanyDetail({ company }: { company: Company }) {
             <Button onClick={handleSave} loading={saving} size="lg" className="w-full">
               <Save className="w-4 h-4" /> Save Changes
             </Button>
+
+            <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6 space-y-4">
+              <h2 className="font-semibold text-surface-100">Tenant Infrastructure</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-surface-400">Deployment Mode</label>
+                  <select
+                    value={infraForm.deploymentMode}
+                    onChange={(e) => setInfraForm((prev) => ({ ...prev, deploymentMode: e.target.value as "SHARED" | "DEDICATED" }))}
+                    className="w-full bg-surface-900 border border-surface-700 rounded-xl px-3 py-2 text-sm text-surface-100"
+                  >
+                    <option value="SHARED">SHARED</option>
+                    <option value="DEDICATED">DEDICATED</option>
+                  </select>
+                </div>
+                <Input label="Backend URL" value={infraForm.backendBaseUrl} onChange={(e) => setInfraForm((prev) => ({ ...prev, backendBaseUrl: e.target.value }))} />
+                <Input label="Frontend URL" value={infraForm.frontendBaseUrl} onChange={(e) => setInfraForm((prev) => ({ ...prev, frontendBaseUrl: e.target.value }))} />
+                <Input label="Backend IP" value={infraForm.backendIp} onChange={(e) => setInfraForm((prev) => ({ ...prev, backendIp: e.target.value }))} />
+                <Input label="Frontend IP" value={infraForm.frontendIp} onChange={(e) => setInfraForm((prev) => ({ ...prev, frontendIp: e.target.value }))} />
+                <Input label="DB Host" value={infraForm.dbHost} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbHost: e.target.value }))} />
+                <Input label="DB Port" value={infraForm.dbPort} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbPort: e.target.value }))} />
+                <Input label="DB Name" value={infraForm.dbName} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbName: e.target.value }))} />
+                <Input label="DB User Secret Ref" value={infraForm.dbUserSecretRef} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbUserSecretRef: e.target.value }))} />
+                <Input label="DB Password Secret Ref" value={infraForm.dbPasswordSecretRef} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbPasswordSecretRef: e.target.value }))} />
+                <Input label="DB URL Secret Ref" value={infraForm.dbUrlSecretRef} onChange={(e) => setInfraForm((prev) => ({ ...prev, dbUrlSecretRef: e.target.value }))} />
+                <Input label="AI Provider" value={infraForm.aiProvider} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiProvider: e.target.value }))} />
+                <Input label="AI Model" value={infraForm.aiModel} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiModel: e.target.value }))} />
+                <Input label="AI Key Secret Ref" value={infraForm.aiApiKeySecretRef} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiApiKeySecretRef: e.target.value }))} />
+                <Input label="AI Base URL" value={infraForm.aiBaseUrl} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiBaseUrl: e.target.value }))} />
+                <Input
+                  label="AI Daily Request Budget"
+                  value={infraForm.aiRequestBudgetDaily}
+                  onChange={(e) => setInfraForm((prev) => ({ ...prev, aiRequestBudgetDaily: e.target.value }))}
+                />
+              </div>
+              <div className="text-xs text-surface-400">
+                Status: <span className="font-semibold text-surface-200">{provisioningStatusDraft}</span>
+                {company.infraConfig?.provisioningError ? ` - ${company.infraConfig.provisioningError}` : ""}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-surface-400">Manual Provisioning Status</label>
+                  <select
+                    value={provisioningStatusDraft}
+                    onChange={(e) =>
+                      setProvisioningStatusDraft(
+                        e.target.value as "PENDING" | "PROVISIONING" | "READY" | "FAILED"
+                      )
+                    }
+                    className="w-full bg-surface-900 border border-surface-700 rounded-xl px-3 py-2 text-sm text-surface-100"
+                  >
+                    <option value="PENDING">PENDING</option>
+                    <option value="PROVISIONING">PROVISIONING</option>
+                    <option value="READY">READY</option>
+                    <option value="FAILED">FAILED</option>
+                  </select>
+                </div>
+                <Input
+                  label="Status Error/Note"
+                  value={provisioningErrorDraft}
+                  onChange={(e) => setProvisioningErrorDraft(e.target.value)}
+                  placeholder="Optional error or note"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSaveInfra} loading={savingInfra} size="sm">
+                  <Save className="w-4 h-4" /> Save Infra
+                </Button>
+                <Button onClick={handleTriggerProvision} loading={triggeringProvision} size="sm" variant="secondary">
+                  <RefreshCw className="w-4 h-4" /> Queue Provision
+                </Button>
+                <Button onClick={handleRunProvisioningNow} loading={runningProvisioningNow} size="sm" variant="secondary">
+                  Run Now
+                </Button>
+                <Button onClick={handleRebuildTenantDbNow} loading={rebuildingTenantDbNow} size="sm" variant="outline">
+                  Rebuild Tenant DB Now
+                </Button>
+                <Button onClick={handleUpdateProvisioningStatus} loading={updatingProvisioningStatus} size="sm" variant="outline">
+                  Update Status
+                </Button>
+                <Button onClick={loadProvisioningJobs} loading={loadingProvisioningJobs} size="sm" variant="ghost">
+                  Refresh Timeline
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-surface-100">Provisioning Timeline</h2>
+                <span className="text-xs text-surface-500">{provisioningJobs.length} jobs</span>
+              </div>
+              {provisioningJobs.length === 0 ? (
+                <p className="text-sm text-surface-500">No provisioning jobs yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {provisioningJobs.slice(0, 8).map((job) => {
+                    const stepLogs = Array.isArray(job.payload?.stepLogs) ? job.payload?.stepLogs ?? [] : [];
+                    return (
+                      <div key={job.id} className="rounded-xl border border-surface-700 bg-surface-750/50 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm text-surface-200 font-medium">
+                            {job.action} - {job.status}
+                          </div>
+                          <div className="text-[11px] text-surface-500">
+                            {new Date(job.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                        {job.lastError ? (
+                          <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+                            {job.lastError}
+                          </div>
+                        ) : null}
+                        {stepLogs.length === 0 ? (
+                          <p className="text-xs text-surface-500">No step logs captured.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {stepLogs.map((log, idx) => (
+                              <div key={`${job.id}-${idx}`} className="flex items-start gap-2">
+                                <span
+                                  className={cn(
+                                    "mt-0.5 inline-flex h-2 w-2 rounded-full",
+                                    log.status === "success"
+                                      ? "bg-emerald-400"
+                                      : log.status === "failed"
+                                      ? "bg-red-400"
+                                      : log.status === "skipped"
+                                      ? "bg-amber-400"
+                                      : "bg-blue-400"
+                                  )}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs text-surface-200">
+                                    {log.step ?? "step"}{" "}
+                                    <span className="text-surface-500">({log.status ?? "started"})</span>
+                                  </p>
+                                  {log.message ? <p className="text-[11px] text-surface-500">{log.message}</p> : null}
+                                  {log.at ? (
+                                    <p className="text-[10px] text-surface-600">{new Date(log.at).toLocaleString()}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -510,6 +905,54 @@ export default function CompanyDetail({ company }: { company: Company }) {
                   </span>{" "}
                   ({seats} active seats)
                 </p>
+              </div>
+
+              <div className="border border-surface-700 rounded-xl p-4 bg-surface-750/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-100">Chat Add-on</p>
+                    <p className="text-xs text-surface-500">Enable paid team chat module.</p>
+                  </div>
+                  <button
+                    onClick={() => setBillingForm({ ...billingForm, chatAddonEnabled: !billingForm.chatAddonEnabled })}
+                    className={`w-12 h-6 rounded-full transition-all relative ${billingForm.chatAddonEnabled ? "bg-primary-500" : "bg-surface-600"}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${billingForm.chatAddonEnabled ? "left-6" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <Input
+                  label="Chat Price / Seat"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.chatPricePerSeat}
+                  onChange={(e) => setBillingForm({ ...billingForm, chatPricePerSeat: e.target.value })}
+                  placeholder="e.g. 4.99"
+                />
+              </div>
+
+              <div className="border border-surface-700 rounded-xl p-4 bg-surface-750/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-100">Recurring Add-on</p>
+                    <p className="text-xs text-surface-500">Enable paid recurring tasks module.</p>
+                  </div>
+                  <button
+                    onClick={() => setBillingForm({ ...billingForm, recurringAddonEnabled: !billingForm.recurringAddonEnabled })}
+                    className={`w-12 h-6 rounded-full transition-all relative ${billingForm.recurringAddonEnabled ? "bg-primary-500" : "bg-surface-600"}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${billingForm.recurringAddonEnabled ? "left-6" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <Input
+                  label="Recurring Price / Seat"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.recurringPricePerSeat}
+                  onChange={(e) => setBillingForm({ ...billingForm, recurringPricePerSeat: e.target.value })}
+                  placeholder="e.g. 2.99"
+                />
               </div>
             </div>
 

@@ -36,6 +36,24 @@ type BulkPlan = {
   drafts: BulkDraftTask[];
 };
 
+function parseDueDateInput(input: string): Date {
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const monthIndex = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return new Date(year, monthIndex, day);
+  }
+  return new Date(input);
+}
+
+function formatDateForReminderNote(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const reqSchema = z.object({
   action: z.enum(["ask", "confirm_bulk_create"]).optional(),
   question: z.string().min(4).max(500).optional(),
@@ -258,7 +276,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
             .filter(Boolean)
             .join("\n"),
           priority: d.priority,
-          dueDate: d.dueDate ? new Date(d.dueDate) : null,
+          dueDate: d.dueDate ? parseDueDateInput(d.dueDate) : null,
         })),
       });
       created += result.count;
@@ -268,7 +286,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const remindData = allowedDrafts
       .map((d) => {
         if (!d.dueDate) return null;
-        const due = new Date(d.dueDate);
+        const due = parseDueDateInput(d.dueDate);
         if (Number.isNaN(due.getTime())) return null;
         const remindAt = new Date(due.getTime() - 2 * 24 * 60 * 60 * 1000);
         if (remindAt.getTime() <= now.getTime()) return null;
@@ -280,7 +298,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           companyId: company.id,
           userId: d.assigneeId,
           title: `Due in ${daysUntilDue} days`,
-          note: `${d.title}\nDue date: ${due.toISOString()}`,
+          note: `${d.title}\nDue date: ${formatDateForReminderNote(due)}`,
           remindAt,
         };
       })
@@ -358,6 +376,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         responseSchema: bulkExtractSchema as unknown as Record<string, unknown>,
         retries: 1,
         timeoutMs: 10000,
+        companyId: company.id,
+        endpointTag: "leadergpt-bulk-extract",
       });
       const spec = bulkSpecSchema.parse(extracted);
 
@@ -495,6 +515,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         responseSchema: taskExtractSchema as unknown as Record<string, unknown>,
         retries: 1,
         timeoutMs: 10000,
+        companyId: company.id,
+        endpointTag: "leadergpt-task-extract",
       });
       const draft = taskDraftSchema.parse(extracted);
 
@@ -550,6 +572,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       responseSchema: leaderQaResponseSchema as unknown as Record<string, unknown>,
       retries: 1,
       timeoutMs: 12000,
+      companyId: company.id,
+      endpointTag: "leadergpt-qa",
     });
     result = answerSchema.parse(generated);
   } catch (err) {

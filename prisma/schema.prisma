@@ -44,6 +44,9 @@ model Company {
   userReminders    UserReminder[]
   channels         Channel[]
   channelMessages  ChannelMessage[]
+  infraConfig      TenantInfraConfig?
+  provisioningJobs TenantProvisioningJob[]
+  aiUsageLogs      TenantAiUsageLog[]
 
   @@map("companies")
 }
@@ -256,7 +259,7 @@ model Approval {
   createdAt  DateTime       @default(now())
 
   request  ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  approver User            @relation(fields: [approverId], references: [id])
+  approver User            @relation(fields: [approverId], references: [id], onDelete: Cascade)
 
   @@map("approvals")
 }
@@ -278,7 +281,7 @@ model TaskComment {
   updatedAt DateTime @updatedAt
 
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id])
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@map("task_comments")
 }
@@ -394,6 +397,10 @@ model CompanyBilling {
   pricePerSeat       Float?                         // null = use platform default
   aiAddonEnabled     Boolean   @default(false)
   aiPricePerSeat     Float?
+  chatAddonEnabled   Boolean   @default(false)
+  chatPricePerSeat   Float?
+  recurringAddonEnabled Boolean @default(false)
+  recurringPricePerSeat Float?
   seatsLimit         Int?                           // null = unlimited
   billingEmail       String?
   notes              String?
@@ -406,4 +413,98 @@ model CompanyBilling {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("company_billing")
+}
+
+model TenantInfraConfig {
+  id                   String   @id @default(cuid())
+  companyId            String   @unique
+  deploymentMode       DeploymentMode @default(SHARED)
+  provisioningStatus   ProvisioningStatus @default(PENDING)
+  provisioningError    String?
+
+  // Dedicated/shared runtime targets
+  backendBaseUrl       String?
+  backendIp            String?
+  frontendBaseUrl      String?
+  frontendIp           String?
+
+  // DB metadata (secret refs, not plaintext creds)
+  dbHost               String?
+  dbPort               Int?
+  dbName               String?
+  dbUserSecretRef      String?
+  dbPasswordSecretRef  String?
+  dbUrlSecretRef       String?
+
+  // AI isolation per tenant
+  aiProvider           String?   // gemini | openai | custom
+  aiModel              String?
+  aiApiKeySecretRef    String?
+  aiBaseUrl            String?
+  aiRequestBudgetDaily Int?
+  aiRequestCountDaily  Int       @default(0)
+  aiBudgetResetAt      DateTime?
+
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([provisioningStatus, updatedAt])
+  @@map("tenant_infra_configs")
+}
+
+model TenantProvisioningJob {
+  id                String   @id @default(cuid())
+  companyId         String
+  action            ProvisioningAction
+  status            ProvisioningStatus @default(PENDING)
+  idempotencyKey    String?
+  attempts          Int      @default(0)
+  maxAttempts       Int      @default(3)
+  lastError         String?
+  payload           Json?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status, createdAt])
+  @@map("tenant_provisioning_jobs")
+}
+
+model TenantAiUsageLog {
+  id            String   @id @default(cuid())
+  companyId     String
+  endpoint      String
+  provider      String?
+  model         String?
+  requestCount  Int      @default(1)
+  estimatedCost Float?
+  createdAt     DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@map("tenant_ai_usage_logs")
+}
+
+enum DeploymentMode {
+  SHARED
+  DEDICATED
+}
+
+enum ProvisioningStatus {
+  PENDING
+  PROVISIONING
+  READY
+  FAILED
+}
+
+enum ProvisioningAction {
+  PROVISION
+  REPROVISION
+  VALIDATE
 }

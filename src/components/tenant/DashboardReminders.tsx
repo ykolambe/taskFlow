@@ -17,6 +17,13 @@ export interface ReminderRow {
   createdAt: string;
 }
 
+function normalizeReminderNote(note: string): string {
+  return note.replace(
+    /(Due date:\s*)(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}\.\d{3}Z/g,
+    (_m, prefix: string, dateOnly: string) => `${prefix}${dateOnly}`
+  );
+}
+
 interface Props {
   slug: string;
   initial: ReminderRow[];
@@ -280,7 +287,7 @@ function ReminderLine({
         <p className={cn("text-sm font-medium", r.isDone ? "text-surface-500 line-through" : "text-surface-100")}>
           {r.title}
         </p>
-        {r.note && <p className="text-xs text-surface-500 mt-0.5">{r.note}</p>}
+        {r.note && <p className="text-xs text-surface-500 mt-0.5 whitespace-pre-wrap">{normalizeReminderNote(r.note)}</p>}
         <p className={cn("text-[11px] mt-1 flex items-center gap-1", dueTextClass(r.remindAt, overdue))}>
           <Clock className="w-3 h-3" />
           {formatDateTime(r.remindAt)}

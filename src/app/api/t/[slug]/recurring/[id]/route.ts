@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getNextDueDate } from "@/lib/utils";
+import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, avatarUrl: true,
@@ -15,8 +16,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
 
   const recurring = await prisma.recurringTask.findFirst({
     where: { id, company: { slug } },
+    include: { company: { select: { id: true } } },
   });
   if (!recurring) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(recurring.company.id, "recurring"))) {
+    return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
+  }
   if (recurring.creatorId !== user.userId && !user.isSuperAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -63,8 +68,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
 
   const recurring = await prisma.recurringTask.findFirst({
     where: { id, company: { slug } },
+    include: { company: { select: { id: true } } },
   });
   if (!recurring) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(recurring.company.id, "recurring"))) {
+    return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
+  }
   if (recurring.creatorId !== user.userId && !user.isSuperAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

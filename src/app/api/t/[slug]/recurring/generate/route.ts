@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getNextDueDate } from "@/lib/utils";
+import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
 /**
  * POST /api/t/[slug]/recurring/generate
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(company.id, "recurring"))) {
+    return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
+  }
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

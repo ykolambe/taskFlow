@@ -33,7 +33,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { firstName, lastName, isActive, roleLevelId, parentId, aiLeaderQaEnabled } = await req.json();
+  const body = await req.json();
+  const { firstName, lastName, isActive, roleLevelId, parentId, aiLeaderQaEnabled, isSuperAdmin } = body;
 
   const updated = await prisma.user.update({
     where: { id },
@@ -41,10 +42,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       ...(firstName && { firstName }),
       ...(lastName && { lastName }),
       ...(isActive !== undefined && currentUser.isSuperAdmin && { isActive }),
-      ...(roleLevelId && currentUser.isSuperAdmin && { roleLevelId }),
+      ...(Object.prototype.hasOwnProperty.call(body, "roleLevelId") &&
+        currentUser.isSuperAdmin && { roleLevelId: roleLevelId || null }),
       ...(parentId !== undefined && currentUser.isSuperAdmin && { parentId }),
       ...(aiLeaderQaEnabled !== undefined &&
         currentUser.isSuperAdmin && { aiLeaderQaEnabled: Boolean(aiLeaderQaEnabled) }),
+      ...(isSuperAdmin !== undefined && currentUser.isSuperAdmin && { isSuperAdmin: Boolean(isSuperAdmin) }),
     },
     include: { roleLevel: true },
   });

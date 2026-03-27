@@ -73,12 +73,43 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       return NextResponse.json({ success: true, data: updated });
     }
 
-    // Check if all required approvals are now done
-    // Reload approvals to include the one we just created
+    // Check if all required approvals are now done.
+    // Reload approvals to include the one we just created.
     const updatedApprovals = await prisma.approval.findMany({ where: { requestId: id } });
-    const remainingApprover = getNextRequiredApprover(chain, updatedApprovals);
+    const approvedIds = new Set(
+      updatedApprovals
+        .filter((a) => a.status === "APPROVED")
+        .map((a) => a.approverId)
+    );
 
-    if (remainingApprover !== null) {
+    const chainUsers = await prisma.user.findMany({
+      where: { id: { in: chain }, companyId: company.id },
+      select: { id: true, isSuperAdmin: true, roleLevel: { select: { level: true } } },
+    });
+    const chainUserById = new Map(chainUsers.map((u) => [u.id, u]));
+
+    // Business rule:
+    // If top-level employee (highest rank non-superadmin in chain) approved,
+    // super-admin-only steps are no longer required.
+    const topEmployeeLevel = chainUsers
+      .filter((u) => !u.isSuperAdmin && u.roleLevel?.level !== null && u.roleLevel?.level !== undefined)
+      .reduce<number | null>((min, u) => {
+        const lvl = u.roleLevel!.level;
+        return min === null ? lvl : Math.min(min, lvl);
+      }, null);
+
+    const topEmployeeApproved =
+      topEmployeeLevel !== null &&
+      chainUsers.some((u) => !u.isSuperAdmin && u.roleLevel?.level === topEmployeeLevel && approvedIds.has(u.id));
+
+    const remainingApprover = chain.find((uid) => {
+      if (approvedIds.has(uid)) return false;
+      if (topEmployeeApproved && chainUserById.get(uid)?.isSuperAdmin) return false;
+      return true;
+    }) ?? null;
+    const approvedBySuperAdmin = currentUser.isSuperAdmin;
+
+    if (!approvedBySuperAdmin && remainingApprover !== null) {
       // More approvers in the chain — stay PENDING, pass to next person
       const updated = await prisma.approvalRequest.findUnique({
         where: { id },
@@ -101,6 +132,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     const username =
       newUserData.username ||
       `${newUserData.firstName.toLowerCase().replace(/\s/g, "")}${Math.floor(Math.random() * 1000)}`;
+
+    const existingEmail = await prisma.user.findFirst({
+      where: { companyId: company.id, email: newUserData.email.toLowerCase() },
+      select: { id: true },
+    });
+    if (existingEmail) {
+      return NextResponse.json({ error: "User with this email already exists in company" }, { status: 409 });
+    }
 
     await prisma.user.create({
       data: {

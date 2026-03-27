@@ -249,3 +249,33 @@ GEMINI_API_KEY="your-gemini-api-key"
   - command rate-limited per user/company
 - Audit trail marker is appended to created task descriptions (`created_via_ai_bulk`).
 
+### Tenant-isolated infra control-plane (hybrid)
+
+- Platform admin can now configure tenant runtime infra from company detail:
+  - deployment mode: `SHARED | DEDICATED`
+  - backend/frontend targets
+  - DB metadata + secret refs (no plaintext credentials in DB)
+  - per-tenant AI provider/model/key ref + daily request budget
+- New APIs:
+  - `PATCH /api/platform/companies/[id]/infra`
+  - `GET|POST /api/platform/companies/[id]/provisioning`
+  - `POST /api/platform/provisioning/run` (platform auth or `PROVISIONING_RUN_TOKEN`)
+- Provisioning is asynchronous via `tenant_provisioning_jobs` with idempotency key support.
+- Runtime resolver endpoint: `GET /api/t/[slug]/runtime`.
+
+### Chat and recurring add-on gating
+
+- `chat` and `recurring` are explicit paid add-ons in company billing.
+- Access requires both:
+  - module enabled in company modules (`chat`, `recurring`)
+  - corresponding billing add-on enabled (`chatAddonEnabled`, `recurringAddonEnabled`)
+- Protected APIs return `403` when disabled:
+  - chat channels/messages APIs
+  - recurring tasks API
+
+### Migration helper
+
+- Existing tenants can be initialized with:
+  - `POST /api/platform/migrations/tenant-infra`
+- It upserts default infra config (`SHARED`, `READY`) and billing add-on rows aligned with current enabled modules.
+

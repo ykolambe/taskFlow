@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getNextDueDate } from "@/lib/utils";
+import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, avatarUrl: true,
@@ -15,6 +16,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isModuleEnabledForCompany(company.id, "recurring"))) {
+    return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
+  }
 
   const allUsers = await prisma.user.findMany({ where: { companyId: company.id }, select: { id: true, parentId: true } });
   const getSubtreeIds = (userId: string): string[] => {
@@ -57,6 +61,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     const company = await prisma.company.findUnique({ where: { slug } });
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!(await isModuleEnabledForCompany(company.id, "recurring"))) {
+      return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
+    }
 
     const start = startDate ? new Date(startDate) : new Date();
     const nextDue = getNextDueDate(frequency, daysOfWeek || [], dayOfMonth || null, start);

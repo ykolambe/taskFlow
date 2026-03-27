@@ -38,37 +38,52 @@ export default async function OrgChartPage({
     canApprove: false,
   };
 
-  // Build tree
+  const superAdminOnlyUsers = allUsers.filter((u) => u.isSuperAdmin && !u.roleLevelId);
+  const superAdminOnlyIds = new Set(superAdminOnlyUsers.map((u) => u.id));
+  const mainHierarchyUsers = allUsers.filter((u) => !superAdminOnlyIds.has(u.id));
+
+  function toOrgNode(u: (typeof allUsers)[number]) {
+    const rl = u.roleLevel;
+    const roleLevel = rl
+      ? {
+          id: rl.id,
+          name: rl.name,
+          level: rl.level,
+          color: rl.color,
+          companyId: u.companyId,
+          canApprove: rl.canApprove,
+        }
+      : fallbackRoleLevel;
+    return {
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+      avatarUrl: u.avatarUrl,
+      isSuperAdmin: u.isSuperAdmin,
+      isActive: u.isActive,
+      roleLevel,
+    };
+  }
+
+  // Build main tree (excluding super admins from chain; director stays directly below org).
   function buildTree(parentId: string | null): any[] {
-    return allUsers
-      .filter((u) => u.parentId === parentId)
+    return mainHierarchyUsers
+      .filter((u) => {
+        const normalizedParentId = u.parentId && superAdminOnlyIds.has(u.parentId) ? null : u.parentId;
+        return normalizedParentId === parentId;
+      })
       .map((u) => {
-        const rl = u.roleLevel;
-        const roleLevel = rl
-          ? {
-              id: rl.id,
-              name: rl.name,
-              level: rl.level,
-              color: rl.color,
-              companyId: u.companyId,
-              canApprove: rl.canApprove,
-            }
-          : fallbackRoleLevel;
         return {
-          id: u.id,
-          firstName: u.firstName,
-          lastName: u.lastName,
-          email: u.email,
-          avatarUrl: u.avatarUrl,
-          isSuperAdmin: u.isSuperAdmin,
-          isActive: u.isActive,
-          roleLevel,
+          ...toOrgNode(u),
           children: buildTree(u.id),
         };
       });
   }
 
   const orgTree = buildTree(null);
+  const superAdmins = superAdminOnlyUsers
+    .map((u) => ({ ...toOrgNode(u), children: [] }));
 
   const pendingApprovals = user.level <= 2
     ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } })
@@ -78,6 +93,7 @@ export default async function OrgChartPage({
     <TenantLayout user={user} companyName={company.name} companyLogoUrl={company.logoUrl} slug={slug} modules={company.modules} pendingApprovals={pendingApprovals}>
       <OrgChart
         orgTree={orgTree}
+        superAdmins={superAdmins}
         currentUserId={user.userId}
         companyName={company.name}
         companyLogoUrl={company.logoUrl}

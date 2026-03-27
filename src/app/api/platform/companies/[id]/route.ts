@@ -39,6 +39,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
+    // Keep module toggles aligned with add-on gates for chat/recurring.
+    if (modules !== undefined && Array.isArray(modules)) {
+      await prisma.companyBilling.upsert({
+        where: { companyId: id },
+        update: {
+          chatAddonEnabled: modules.includes("chat"),
+          recurringAddonEnabled: modules.includes("recurring"),
+        },
+        create: {
+          companyId: id,
+          plan: "FREE",
+          chatAddonEnabled: modules.includes("chat"),
+          recurringAddonEnabled: modules.includes("recurring"),
+        },
+      });
+    }
+
     if (roleLevels) {
       const existingIds = roleLevels.filter((r: { id?: string }) => r.id).map((r: { id: string }) => r.id);
       await prisma.roleLevel.deleteMany({
@@ -71,6 +88,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const user = await getPlatformUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.company.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  try {
+    await prisma.company.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("Company delete failed:", err);
+    const message = err instanceof Error ? err.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

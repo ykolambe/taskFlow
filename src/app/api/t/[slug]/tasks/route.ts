@@ -7,6 +7,24 @@ const USER_SELECT = {
   roleLevelId: true, roleLevel: true, email: true, username: true, isSuperAdmin: true,
 };
 
+function parseDueDateInput(input: string): Date {
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const monthIndex = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return new Date(year, monthIndex, day);
+  }
+  return new Date(input);
+}
+
+function formatDateForReminderNote(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const user = await getTenantUser(slug);
@@ -85,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "You can only assign tasks to yourself or people below you" }, { status: 403 });
     }
 
-    const dueDateObj = dueDate ? new Date(dueDate) : null;
+    const dueDateObj = dueDate ? parseDueDateInput(String(dueDate)) : null;
     if (dueDateObj && Number.isNaN(dueDateObj.getTime())) {
       return NextResponse.json({ error: "Invalid dueDate" }, { status: 400 });
     }
@@ -122,7 +140,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
             companyId: company.id,
             userId: finalAssigneeId,
             title: `Due in ${daysUntilDue} days`,
-            note: `${title}\nDue date: ${dueDateObj.toISOString()}`,
+            note: `${title}\nDue date: ${formatDateForReminderNote(dueDateObj)}`,
             remindAt,
           },
         });
