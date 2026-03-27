@@ -1,2 +1,10 @@
 node_modules
 .env
+.next
+# Next.js
+
+out/
+.swc/
+
+# Dependencies
+node_modules/
