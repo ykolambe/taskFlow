@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent, DragOverlay, useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Search, Archive, X, Paperclip, Calendar, Upload, FileText, Image, File, Trash2, LayoutList, Columns } from "lucide-react";
+import { Plus, Search, Archive, X, Paperclip, Calendar, Upload, FileText, Image, File, Trash2, LayoutList, Columns, ClipboardList } from "lucide-react";
+import Link from "next/link";
+import TaskRequestModal from "@/components/tenant/TaskRequestModal";
 import { StatusBadge, PriorityBadge } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -14,7 +16,7 @@ import { Task, Priority, User as UserType } from "@/types";
 import { formatDate, isOverdue, canCompleteTask, canManageAnyTaskStatus } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import TaskComments from "@/components/tenant/TaskComments";
 
 export interface StatusConfig {
@@ -44,11 +46,25 @@ interface Props {
   taskStatuses?: StatusConfig[];
   initialTaskId?: string;
   openNew?: boolean;
+  /** Open “Request approval” modal on load (e.g. `/tasks?request=1`). */
+  openTaskRequest?: boolean;
 }
 
-export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, canViewArchived, assignableUsers, slug, taskStatuses, initialTaskId, openNew }: Props) {
+export default function TasksBoard({
+  user,
+  tasks: initialTasks,
+  archivedTasks,
+  canViewArchived,
+  assignableUsers,
+  slug,
+  taskStatuses,
+  initialTaskId,
+  openNew,
+  openTaskRequest,
+}: Props) {
   const statusConfigs = taskStatuses?.length ? taskStatuses : DEFAULT_STATUSES;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState(initialTasks);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -60,6 +76,7 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
     initialTaskId ? (initialTasks.find((t) => t.id === initialTaskId) || null) : null
   );
   const [showNewTask, setShowNewTask] = useState(openNew || false);
+  const [showTaskRequest, setShowTaskRequest] = useState(!!openTaskRequest);
   const [view, setView] = useState<"board" | "list">("list");
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -70,6 +87,17 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
   const [creating, setCreating] = useState(false);
 
   const doneKeys = statusConfigs.filter((s) => s.type === "DONE").map((s) => s.key);
+
+  useEffect(() => {
+    if (openTaskRequest) setShowTaskRequest(true);
+  }, [openTaskRequest]);
+
+  const closeTaskRequestModal = () => {
+    setShowTaskRequest(false);
+    if (searchParams.get("request") === "1") {
+      router.replace(`/t/${slug}/tasks`, { scroll: false });
+    }
+  };
 
   const filteredTasks = tasks.filter((t) => {
     if (search) {
@@ -317,6 +345,19 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
                 )}
               </>
             )}
+            <Link
+              href={`/t/${slug}/tasks/requests`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-primary-400 border border-surface-600 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">Task requests</span>
+              <span className="sm:hidden">Requests</span>
+            </Link>
+            <Button variant="outline" onClick={() => setShowTaskRequest(true)} size="sm" title="Create a task request for manager approval">
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">Request approval</span>
+              <span className="sm:hidden">Request</span>
+            </Button>
             <Button onClick={() => setShowNewTask(true)} size="sm">
               <Plus className="w-4 h-4" /> New Task
             </Button>
@@ -440,6 +481,13 @@ export default function TasksBoard({ user, tasks: initialTasks, archivedTasks, c
       </Modal>
 
       {/* New Task Modal */}
+      <TaskRequestModal
+        open={showTaskRequest}
+        onClose={closeTaskRequestModal}
+        slug={slug}
+        onCreated={() => router.refresh()}
+      />
+
       <Modal isOpen={showNewTask} onClose={() => setShowNewTask(false)} title="Create New Task" size="md">
         <div className="space-y-4">
           <Input

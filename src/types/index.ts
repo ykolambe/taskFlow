@@ -73,6 +73,7 @@ export interface UserBrief {
   roleLevelId: string;
   roleLevel: RoleLevel;
   isSuperAdmin: boolean;
+  parentId?: string | null;
 }
 
 // ─── Task ─────────────────────────────────────────────────────────────────
@@ -197,9 +198,36 @@ export interface TaskComment {
   taskId: string;
   authorId: string;
   body: string;
+  isSystem?: boolean;
   createdAt: string;
   updatedAt: string;
   author: UserBrief;
+}
+
+export type TaskRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface TaskRequest {
+  id: string;
+  companyId: string;
+  requesterId: string;
+  approverId: string;
+  title: string;
+  description: string | null;
+  priority: Priority;
+  dueDate: string | null;
+  status: TaskRequestStatus;
+  attachmentFileUrl: string | null;
+  attachmentFileName: string | null;
+  attachmentMimeType: string | null;
+  attachmentFileSize: number | null;
+  createdTaskId: string | null;
+  approverAssigneeId: string | null;
+  rejectComment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  requester: UserBrief;
+  approver: UserBrief;
+  createdTask?: { id: string; title: string; status: string } | null;
 }
 
 // ─── Attachment ───────────────────────────────────────────────────────────

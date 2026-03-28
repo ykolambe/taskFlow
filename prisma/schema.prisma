@@ -38,6 +38,7 @@ model Company {
   tasks            Task[]
   recurringTasks   RecurringTask[]
   approvalRequests ApprovalRequest[]
+  taskRequests     TaskRequest[]
   ideas            Idea[]
   taskStatuses     TaskStatusConfig[]
   billing          CompanyBilling?
@@ -102,6 +103,8 @@ model User {
   assignedRecurring  RecurringTask[]   @relation("RecurringAssignee")
   approvalRequests   ApprovalRequest[] @relation("ApprovalRequester")
   approvals          Approval[]
+  taskRequestsSubmitted TaskRequest[]  @relation("TaskRequestRequester")
+  taskRequestsToApprove TaskRequest[]    @relation("TaskRequestApprover")
   taskComments       TaskComment[]
   ideas              Idea[]
   userReminders      UserReminder[]
@@ -158,6 +161,7 @@ model Task {
   recurring   RecurringTask? @relation(fields: [recurringId], references: [id])
   attachments  Attachment[]
   comments     TaskComment[]
+  taskRequestCreated TaskRequest?
 
   @@map("tasks")
 }
@@ -192,6 +196,47 @@ enum Priority {
   MEDIUM
   HIGH
   URGENT
+}
+
+// ─── Task approval requests (manager approves before task exists) ─────────
+
+model TaskRequest {
+  id          String            @id @default(cuid())
+  companyId   String
+  requesterId String
+  approverId  String
+  title       String
+  description String?
+  priority    Priority          @default(MEDIUM)
+  dueDate     DateTime?
+  status      TaskRequestStatus @default(PENDING)
+
+  attachmentFileUrl    String?
+  attachmentFileName   String?
+  attachmentMimeType   String?
+  attachmentFileSize   Int?
+
+  createdTaskId      String? @unique
+  approverAssigneeId String?
+  rejectComment      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requester User    @relation("TaskRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  approver  User    @relation("TaskRequestApprover", fields: [approverId], references: [id], onDelete: Cascade)
+  createdTask Task? @relation(fields: [createdTaskId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([approverId, status])
+  @@map("task_requests")
+}
+
+enum TaskRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ─── Recurring Tasks ────────────────────────────────────────────────────────
@@ -277,6 +322,7 @@ model TaskComment {
   taskId    String
   authorId  String
   body      String
+  isSystem  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

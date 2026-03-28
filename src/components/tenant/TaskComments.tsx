@@ -177,18 +177,31 @@ export default function TaskComments({ taskId, slug, user }: Props) {
 
             return (
               <div key={comment.id} className="flex gap-2.5 group">
-                <Avatar
-                  firstName={comment.author.firstName}
-                  lastName={comment.author.lastName}
-                  avatarUrl={comment.author.avatarUrl}
-                  size="xs"
-                  className="flex-shrink-0 mt-0.5"
-                />
+                {comment.isSystem ? (
+                  <div
+                    className="w-6 h-6 rounded-full bg-sky-500/20 border border-sky-500/30 flex items-center justify-center flex-shrink-0 mt-0.5 text-[10px] font-bold text-sky-300"
+                    title="Automated message"
+                  >
+                    S
+                  </div>
+                ) : (
+                  <Avatar
+                    firstName={comment.author.firstName}
+                    lastName={comment.author.lastName}
+                    avatarUrl={comment.author.avatarUrl}
+                    size="xs"
+                    className="flex-shrink-0 mt-0.5"
+                  />
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-semibold text-surface-200">
-                      {comment.author.firstName} {comment.author.lastName}
-                    </span>
+                    {comment.isSystem ? (
+                      <span className="text-xs font-semibold text-sky-300">System</span>
+                    ) : (
+                      <span className="text-xs font-semibold text-surface-200">
+                        {comment.author.firstName} {comment.author.lastName}
+                      </span>
+                    )}
                     <span className="text-[10px] text-surface-600">
                       {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
                     </span>
@@ -236,7 +249,7 @@ export default function TaskComments({ taskId, slug, user }: Props) {
                 </div>
 
                 {/* Actions (own comments only) */}
-                {isOwn && !isEditing && (
+                {isOwn && !isEditing && !comment.isSystem && (
                   <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                     <button
                       onClick={() => startEdit(comment)}

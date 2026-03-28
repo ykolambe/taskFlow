@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Suspense } from "react";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TasksBoard from "@/components/tenant/TasksBoard";
 
@@ -9,7 +10,9 @@ export default async function TasksPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }> | { slug: string };
-  searchParams: Promise<{ status?: string; task?: string; new?: string }> | { status?: string; task?: string; new?: string };
+  searchParams:
+    | Promise<{ status?: string; task?: string; new?: string; request?: string }>
+    | { status?: string; task?: string; new?: string; request?: string };
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -86,17 +89,20 @@ export default async function TasksPage({
 
   return (
     <TenantLayout user={user} companyName={company.name} companyLogoUrl={company.logoUrl} slug={slug} modules={company.modules} pendingApprovals={pendingApprovals}>
-      <TasksBoard
-        user={user}
-        tasks={tasks as any}
-        archivedTasks={archivedTasks as any}
-        canViewArchived={hasSubordinates}
-        assignableUsers={assignableUsers as any}
-        slug={slug}
-        taskStatuses={taskStatuses}
-        initialTaskId={sp.task}
-        openNew={sp.new === "1"}
-      />
+      <Suspense fallback={<div className="p-6 text-sm text-surface-500">Loading tasks…</div>}>
+        <TasksBoard
+          user={user}
+          tasks={tasks as any}
+          archivedTasks={archivedTasks as any}
+          canViewArchived={hasSubordinates}
+          assignableUsers={assignableUsers as any}
+          slug={slug}
+          taskStatuses={taskStatuses}
+          initialTaskId={sp.task}
+          openNew={sp.new === "1"}
+          openTaskRequest={sp.request === "1"}
+        />
+      </Suspense>
     </TenantLayout>
   );
 }

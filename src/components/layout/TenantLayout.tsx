@@ -20,6 +20,7 @@ import {
   UserCircle,
   Lightbulb,
   CreditCard,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Avatar from "@/components/ui/Avatar";
@@ -96,6 +97,12 @@ export default function TenantLayout({
   const navItems = [
     { href: `/t/${slug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, show: true },
     { href: `/t/${slug}/tasks`, label: "Tasks", icon: CheckSquare, show: modules.includes("tasks") },
+    {
+      href: `/t/${slug}/tasks/requests`,
+      label: "Task requests",
+      icon: ClipboardList,
+      show: modules.includes("tasks"),
+    },
     { href: `/t/${slug}/team`, label: "Team", icon: Users, show: modules.includes("team") },
     { href: `/t/${slug}/org`, label: "Org Chart", icon: GitBranch, show: modules.includes("org") },
     { href: `/t/${slug}/chat`, label: "Team Chat", icon: Bell, show: modules.includes("chat") },
@@ -114,8 +121,14 @@ export default function TenantLayout({
       : []),
   ].filter((item) => item.show);
 
-  const isActive = (href: string) =>
-    pathname === href || (pathname.startsWith(href + "/") && href !== `/t/${slug}/dashboard`);
+  const isActive = (href: string) => {
+    if (pathname === href) return true;
+    if (href === `/t/${slug}/tasks/requests`) return pathname.startsWith(`/t/${slug}/tasks/requests`);
+    if (href === `/t/${slug}/tasks`) {
+      return pathname.startsWith(`${href}/`) && !pathname.startsWith(`/t/${slug}/tasks/requests`);
+    }
+    return pathname.startsWith(`${href}/`) && href !== `/t/${slug}/dashboard`;
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
