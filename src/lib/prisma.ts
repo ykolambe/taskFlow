@@ -29,7 +29,12 @@ function getControlPrisma(): PrismaClient {
     void existing.$disconnect().catch(() => {});
     globalForPrisma.controlPrisma = undefined;
   }
-  return globalForPrisma.controlPrisma ?? createPrismaClient();
+  if (globalForPrisma.controlPrisma) {
+    return globalForPrisma.controlPrisma;
+  }
+  const client = createPrismaClient();
+  globalForPrisma.controlPrisma = client;
+  return client;
 }
 
 type TenantDbContext = { companyId: string; slug: string };
@@ -121,11 +126,11 @@ export const controlPlanePrisma = getControlPrisma();
 
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    const active = getActivePrismaSync() as unknown as Record<string, unknown>;
-    return active[prop as keyof typeof active];
+    const active = getActivePrismaSync();
+    const value = (active as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === "function") {
+      return (value as (...args: unknown[]) => unknown).bind(active);
+    }
+    return value;
   },
 }) as PrismaClient;
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.controlPrisma = controlPlanePrisma;
-}
