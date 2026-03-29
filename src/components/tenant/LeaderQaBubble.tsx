@@ -190,7 +190,7 @@ export default function LeaderQaBubble({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-40">
+    <div className="fixed z-40 right-4 sm:right-5 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] lg:bottom-5">
       {open ? (
         <div className="w-[22rem] sm:w-[26rem] h-[70vh] overflow-hidden rounded-2xl border border-surface-700 bg-surface-900 shadow-2xl flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800">
