@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
-import { Upload, X, Image as ImageIcon } from "lucide-react";
+import { Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import type { Priority, UserBrief } from "@/types";
 import { cn } from "@/lib/utils";
+import { AttachmentPreviewRow } from "@/components/tenant/AttachmentPreview";
 
 interface Props {
   open: boolean;
@@ -188,22 +189,14 @@ export default function TaskRequestModal({ open, onClose, slug, onCreated }: Pro
         <div className="space-y-2">
           <p className="text-xs font-medium text-surface-400">Attachment (optional)</p>
           {pendingFile ? (
-            <div className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2 text-xs">
-              <span className="text-surface-200 truncate flex items-center gap-2">
-                {pendingFile.mimeType.startsWith("image/") ? (
-                  <ImageIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                ) : null}
-                {pendingFile.fileName}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPendingFile(null)}
-                className="text-surface-500 hover:text-red-400 p-1"
-                aria-label="Remove file"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            <AttachmentPreviewRow
+              fileUrl={pendingFile.url}
+              fileName={pendingFile.fileName}
+              fileSize={pendingFile.fileSize}
+              mimeType={pendingFile.mimeType}
+              showRemove
+              onRemove={() => setPendingFile(null)}
+            />
           ) : (
             <button
               type="button"

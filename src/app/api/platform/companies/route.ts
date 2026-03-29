@@ -5,6 +5,7 @@ import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
 import { ProvisioningAction, ProvisioningStatus } from "@prisma/client";
 import { enqueueProvisioningJob, processPendingProvisioningJobs } from "@/lib/tenantProvisioning";
+import { resolveTenantPublicBaseUrl } from "@/lib/requestOrigin";
 
 export async function GET(req: NextRequest) {
   const user = await getPlatformUser();
@@ -44,8 +45,18 @@ export async function POST(req: NextRequest) {
     const defaultDbName = `taskflow_${normalizedSlug.replace(/-/g, "_")}`;
     const defaultDbPort = Number(process.env.PG_SHARED_DEFAULT_PORT ?? "5432");
     const defaultDbHost = process.env.PG_SHARED_DEFAULT_HOST ?? "localhost";
-    const defaultBackendUrl = process.env.SHARED_BACKEND_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-    const defaultFrontendUrl = process.env.SHARED_FRONTEND_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+    const defaultBackendUrl = resolveTenantPublicBaseUrl(
+      req,
+      process.env.SHARED_BACKEND_BASE_URL,
+      process.env.NEXTAUTH_URL,
+      "http://localhost:3000"
+    );
+    const defaultFrontendUrl = resolveTenantPublicBaseUrl(
+      req,
+      process.env.SHARED_FRONTEND_BASE_URL,
+      process.env.NEXTAUTH_URL,
+      "http://localhost:3000"
+    );
     const defaultAiProvider = process.env.SHARED_AI_PROVIDER ?? "gemini";
     const defaultAiModel = process.env.SHARED_AI_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
     const dbUserRef = `TENANT_${tenantKey}_DB_USER`;

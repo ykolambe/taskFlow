@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Plus, RotateCcw, Calendar, User, Pencil, Trash2, Power, PowerOff,
-  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Paperclip, Upload, File, X,
+  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Paperclip, Upload,
 } from "lucide-react";
 import Modal, { ConfirmModal } from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { RecurringTask, Priority, Frequency, User as UserType } from "@/types";
 import { formatDate, DAY_NAMES } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { AttachmentPreviewRow } from "@/components/tenant/AttachmentPreview";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -468,19 +469,20 @@ export default function RecurringTasksPage({ user, initialRecurring, assignableU
               {form.templateAttachments.length > 0 ? (
                 <div className="space-y-1.5">
                   {form.templateAttachments.map((att, idx) => (
-                    <div key={`${att.fileUrl}-${idx}`} className="flex items-center gap-2 bg-surface-750 border border-surface-700 rounded-lg px-3 py-2">
-                      <File className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
-                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-surface-200 hover:text-primary-400 truncate flex-1">
-                        {att.fileName}
-                      </a>
-                      <button
-                        onClick={() => setForm((f) => ({ ...f, templateAttachments: f.templateAttachments.filter((_, i) => i !== idx) }))}
-                        className="text-surface-500 hover:text-red-400 transition-colors p-1"
-                        title="Remove"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <AttachmentPreviewRow
+                      key={`${att.fileUrl}-${idx}`}
+                      fileUrl={att.fileUrl}
+                      fileName={att.fileName}
+                      fileSize={att.fileSize}
+                      mimeType={att.mimeType}
+                      showRemove
+                      onRemove={() =>
+                        setForm((f) => ({
+                          ...f,
+                          templateAttachments: f.templateAttachments.filter((_, i) => i !== idx),
+                        }))
+                      }
+                    />
                   ))}
                 </div>
               ) : (

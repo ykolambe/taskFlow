@@ -8,7 +8,8 @@ import Button from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { PriorityBadge, ApprovalBadge } from "@/components/ui/Badge";
 import { formatDate, formatRelative } from "@/lib/utils";
-import { ClipboardList, Check, X, ExternalLink, Plus } from "lucide-react";
+import { ClipboardList, Check, X, Plus } from "lucide-react";
+import { AttachmentPreviewRow } from "@/components/tenant/AttachmentPreview";
 import TaskRequestModal from "@/components/tenant/TaskRequestModal";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -244,15 +245,15 @@ export default function TaskRequestsInbox({ user, slug }: Props) {
               </div>
 
               {r.attachmentFileUrl && (
-                <a
-                  href={r.attachmentFileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary-400 hover:underline"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  {r.attachmentFileName || "Attachment"}
-                </a>
+                <div className="pt-1">
+                  <AttachmentPreviewRow
+                    fileUrl={r.attachmentFileUrl}
+                    fileName={r.attachmentFileName || "Attachment"}
+                    fileSize={r.attachmentFileSize ?? 0}
+                    mimeType={r.attachmentMimeType || "application/octet-stream"}
+                    compact
+                  />
+                </div>
               )}
 
               {r.status === "REJECTED" && r.rejectComment && (

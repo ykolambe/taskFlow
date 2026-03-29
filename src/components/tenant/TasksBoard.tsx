@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent, DragOverlay, useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Search, Archive, X, Paperclip, Calendar, Upload, FileText, Image, File, Trash2, LayoutList, Columns, ClipboardList } from "lucide-react";
+import { Plus, Search, Archive, X, Paperclip, Calendar, Upload, Trash2, LayoutList, Columns, ClipboardList } from "lucide-react";
 import Link from "next/link";
 import TaskRequestModal from "@/components/tenant/TaskRequestModal";
 import { StatusBadge, PriorityBadge } from "@/components/ui/Badge";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import TaskComments from "@/components/tenant/TaskComments";
+import { AttachmentPreviewRow } from "@/components/tenant/AttachmentPreview";
 
 export interface StatusConfig {
   id: string;
@@ -1053,18 +1054,6 @@ function TaskCard({
   );
 }
 
-function AttachmentIcon({ mimeType }: { mimeType: string }) {
-  if (mimeType.startsWith("image/")) return <Image className="w-4 h-4 text-blue-400" />;
-  if (mimeType === "application/pdf") return <FileText className="w-4 h-4 text-red-400" />;
-  return <File className="w-4 h-4 text-surface-400" />;
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function AttachmentsSection({
   task,
   slug,
@@ -1183,32 +1172,15 @@ function AttachmentsSection({
       {attachments.length > 0 && (
         <div className="space-y-2">
           {attachments.map((att) => (
-            <div
+            <AttachmentPreviewRow
               key={att.id}
-              className="flex items-center gap-3 bg-surface-750 rounded-xl px-3 py-2.5 group"
-            >
-              <AttachmentIcon mimeType={att.mimeType} />
-              <div className="flex-1 min-w-0">
-                <a
-                  href={att.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-surface-200 hover:text-primary-400 truncate block transition-colors"
-                >
-                  {att.fileName}
-                </a>
-                <p className="text-[10px] text-surface-500">{formatBytes(att.fileSize)}</p>
-              </div>
-              {(att.uploaderId === userId || isSuperAdmin) && (
-                <button
-                  onClick={() => handleDelete(att.id)}
-                  className="opacity-0 group-hover:opacity-100 text-surface-500 hover:text-red-400 transition-all p-1 flex-shrink-0"
-                  title="Remove attachment"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+              fileUrl={att.fileUrl}
+              fileName={att.fileName}
+              fileSize={att.fileSize}
+              mimeType={att.mimeType}
+              showRemove={att.uploaderId === userId || isSuperAdmin}
+              onRemove={() => handleDelete(att.id)}
+            />
           ))}
           {/* Drop zone overlay when already has attachments */}
           <div
