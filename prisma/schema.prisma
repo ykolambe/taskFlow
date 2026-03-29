@@ -368,7 +368,9 @@ model ChannelMessage {
   companyId String
   channelId String
   authorId  String
-  body      String
+  body      String   @default("")
+  /// JSON array: { url, kind: "image"|"video", mimeType, fileName? }[]
+  attachments Json   @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

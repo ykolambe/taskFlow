@@ -5,6 +5,26 @@ import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
 type Params = { params: Promise<{ slug: string }> | { slug: string } };
 
+function previewFromMessage(m: {
+  body: string;
+  attachments: unknown;
+}): string {
+  const raw = m.attachments as { kind?: string }[] | null;
+  const list = Array.isArray(raw) ? raw : [];
+  const parts: string[] = [];
+  const t = m.body?.trim();
+  if (t) parts.push(t.length > 72 ? `${t.slice(0, 70)}…` : t);
+  if (list.length > 0) {
+    const imgs = list.filter((a) => a.kind === "image").length;
+    const vids = list.filter((a) => a.kind === "video").length;
+    const bits: string[] = [];
+    if (imgs) bits.push(imgs === 1 ? "Photo" : `${imgs} photos`);
+    if (vids) bits.push(vids === 1 ? "Video" : `${vids} videos`);
+    if (bits.length) parts.push(bits.join(" · "));
+  }
+  return parts.join(" · ") || "Message";
+}
+
 export async function GET(req: NextRequest, { params }: Params) {
   const { slug } = await params;
   const viewer = await getTenantUser(slug);
@@ -60,21 +80,60 @@ export async function GET(req: NextRequest, { params }: Params) {
     },
   });
 
-  const data = channels.map((c) => {
+  const channelIds = channels.map((c) => c.id);
+  const recentMessages =
+    channelIds.length > 0
+      ? await prisma.channelMessage.findMany({
+          where: { companyId: company.id, channelId: { in: channelIds } },
+          orderBy: { createdAt: "desc" },
+          select: { channelId: true, body: true, createdAt: true, attachments: true },
+          take: 500,
+        })
+      : [];
+
+  const latestByChannel = new Map<
+    string,
+    { body: string; createdAt: Date; attachments: unknown }
+  >();
+  for (const m of recentMessages) {
+    if (!latestByChannel.has(m.channelId)) {
+      latestByChannel.set(m.channelId, m);
+    }
+  }
+
+  const rows = channels.map((c) => {
     if (c.type !== "DM") {
       const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
-      return rest;
+      const last = latestByChannel.get(c.id);
+      return {
+        ...rest,
+        lastMessageAt: last?.createdAt?.toISOString() ?? null,
+        lastPreview: last ? previewFromMessage(last) : null,
+      };
     }
     const peer = c.dmUserLowId === viewer.userId ? c.dmUserHigh : c.dmUserLow;
     const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
+    const last = latestByChannel.get(c.id);
     return {
       ...rest,
       peer,
       displayName: peer ? `${peer.firstName} ${peer.lastName}` : c.name,
+      lastMessageAt: last?.createdAt?.toISOString() ?? null,
+      lastPreview: last ? previewFromMessage(last) : null,
     };
   });
 
-  return NextResponse.json({ success: true, data });
+  rows.sort((a, b) => {
+    const ta = a.lastMessageAt
+      ? new Date(a.lastMessageAt).getTime()
+      : new Date(a.createdAt).getTime();
+    const tb = b.lastMessageAt
+      ? new Date(b.lastMessageAt).getTime()
+      : new Date(b.createdAt).getTime();
+    return tb - ta;
+  });
+
+  return NextResponse.json({ success: true, data: rows });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

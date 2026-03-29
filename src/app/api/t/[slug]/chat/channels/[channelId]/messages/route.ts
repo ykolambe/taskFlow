@@ -120,15 +120,34 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
   }
 
-  let body: { text?: string };
+  let body: { text?: string; attachments?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   const text = (body.text ?? "").trim();
-  if (!text) return NextResponse.json({ error: "Message is required" }, { status: 400 });
   if (text.length > 2000) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
+
+  const rawAtt = Array.isArray(body.attachments) ? body.attachments : [];
+  const attachments: { url: string; mimeType: string; kind: "image" | "video"; fileName?: string }[] = [];
+  for (const item of rawAtt.slice(0, 8)) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const url = typeof r.url === "string" ? r.url.trim() : "";
+    if (!url || url.length > 2048) continue;
+    if (!url.startsWith("/") && !/^https?:\/\//i.test(url)) continue;
+    const mimeType =
+      typeof r.mimeType === "string" && r.mimeType.length < 200 ? r.mimeType : "application/octet-stream";
+    const kind = r.kind === "video" ? ("video" as const) : ("image" as const);
+    const fileName =
+      typeof r.fileName === "string" && r.fileName.length < 500 ? r.fileName : undefined;
+    attachments.push({ url, mimeType, kind, fileName });
+  }
+
+  if (!text && attachments.length === 0) {
+    return NextResponse.json({ error: "Add text or attach an image/video" }, { status: 400 });
+  }
 
   const message = await prisma.channelMessage.create({
     data: {
@@ -136,6 +155,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       channelId,
       authorId: viewer.userId,
       body: text,
+      attachments,
     },
     include: {
       author: {

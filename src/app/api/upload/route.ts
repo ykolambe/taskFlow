@@ -16,6 +16,7 @@ import {
  *   ?type=logo    — images only, 5MB, "logos" folder, super admin only
  *   ?type=avatar  — images only, 3MB, "avatars" folder
  *   ?type=attachment — allowed doc/image types, 10MB, "attachments" folder
+ *   ?type=chat       — images + MP4/WebM/MOV video, 25MB, "chat-media" folder
  *   (default)     — same as attachment bucket (10MB, "attachments")
  */
 export async function POST(req: NextRequest) {
@@ -61,6 +62,17 @@ export async function POST(req: NextRequest) {
       folder = "avatars";
       typeError = "Avatar must be a JPEG, PNG, GIF, or WebP image";
       sizeError = "Avatar must be under 3 MB";
+    } else if (uploadType === "chat") {
+      allowedTypes = [
+        ...AVATAR_TYPES,
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+      ];
+      maxSize = 25 * 1024 * 1024;
+      folder = "chat-media";
+      typeError = "Use JPEG, PNG, GIF, WebP, MP4, WebM, or MOV";
+      sizeError = "Each file must be under 25 MB";
     } else {
       allowedTypes = ALLOWED_TYPES;
       maxSize = MAX_SIZE;

@@ -5,10 +5,13 @@ import {
   ArrowLeft,
   Hash,
   MessageCircle,
+  Paperclip,
   Search,
   Send,
   UserPlus,
+  X,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import Avatar from "@/components/ui/Avatar";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
@@ -31,8 +34,18 @@ interface ChannelRow {
   name: string;
   slug: string;
   type: ChannelType;
+  createdAt: string;
   displayName?: string;
   peer?: PeerBrief | null;
+  lastMessageAt?: string | null;
+  lastPreview?: string | null;
+}
+
+interface ChatMediaAttachment {
+  url: string;
+  mimeType: string;
+  kind: "image" | "video";
+  fileName?: string;
 }
 
 interface Author {
@@ -49,6 +62,7 @@ interface Message {
   body: string;
   createdAt: string;
   author: Author;
+  attachments?: ChatMediaAttachment[];
 }
 
 interface Props {
@@ -73,6 +87,9 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [startingDm, setStartingDm] = useState(false);
+  const [stagedMedia, setStagedMedia] = useState<ChatMediaAttachment[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -124,11 +141,43 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
           return label.includes(q) || c.slug.toLowerCase().includes(q);
         });
     return [...base].sort((a, b) => {
-      if (a.type === "DM" && b.type !== "DM") return -1;
-      if (a.type !== "DM" && b.type === "DM") return 1;
-      return (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name);
+      const ta = a.lastMessageAt
+        ? new Date(a.lastMessageAt).getTime()
+        : new Date(a.createdAt).getTime();
+      const tb = b.lastMessageAt
+        ? new Date(b.lastMessageAt).getTime()
+        : new Date(b.createdAt).getTime();
+      return tb - ta;
     });
   }, [channels, listSearch]);
+
+  const handlePickFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploadingMedia(true);
+    try {
+      for (const file of Array.from(files).slice(0, 8 - stagedMedia.length)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`/api/upload?slug=${encodeURIComponent(slug)}&type=chat`, {
+          method: "POST",
+          body: fd,
+        });
+        const j = await res.json();
+        if (!res.ok) {
+          toast.error(j.error || "Upload failed");
+          continue;
+        }
+        const kind: "image" | "video" = file.type.startsWith("video/") ? "video" : "image";
+        setStagedMedia((s) => [
+          ...s,
+          { url: j.url, mimeType: file.type, fileName: file.name, kind },
+        ]);
+      }
+    } finally {
+      setUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const dmCandidates = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
@@ -159,7 +208,11 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
           return;
         }
         if (!mounted) return;
-        const next: Message[] = j.data ?? [];
+        const raw = j.data ?? [];
+        const next: Message[] = raw.map((m: Message) => ({
+          ...m,
+          attachments: Array.isArray(m.attachments) ? m.attachments : [],
+        }));
         setMessages((prev) => {
           if (
             prev.length === next.length &&
@@ -192,21 +245,27 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || !selectedChannel) return;
+    if ((!text && stagedMedia.length === 0) || !selectedChannel) return;
     setSending(true);
     try {
       const res = await fetch(`/api/t/${slug}/chat/channels/${selectedChannel.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, attachments: stagedMedia }),
       });
       const j = await res.json();
       if (!res.ok) {
         toast.error(j.error || "Could not send message");
         return;
       }
-      setMessages((prev) => [...prev, j.data]);
+      const created: Message = {
+        ...j.data,
+        attachments: Array.isArray(j.data?.attachments) ? j.data.attachments : [],
+      };
+      setMessages((prev) => [...prev, created]);
       setInput("");
+      setStagedMedia([]);
+      void loadChannels();
     } finally {
       setSending(false);
     }
@@ -235,7 +294,10 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
         name: j.data.name,
         slug: j.data.slug,
         type: "DM",
+        createdAt: j.data.createdAt ?? new Date().toISOString(),
         displayName: `${peer.firstName} ${peer.lastName}`,
+        lastMessageAt: null,
+        lastPreview: null,
         peer: {
           id: peer.id,
           firstName: peer.firstName,
@@ -313,24 +375,44 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
             {filteredChannels.map((c) => {
               const active = selectedChannel?.id === c.id;
               const label = c.type === "DM" ? c.displayName ?? c.name : c.name;
-              const sub =
+              const kindLabel =
                 c.type === "DM"
-                  ? "Direct message"
+                  ? "Direct"
                   : c.type === "GLOBAL"
-                    ? "Everyone"
+                    ? "Channel · Everyone"
                     : c.type === "ROLE"
-                      ? "Role channel"
+                      ? "Channel · Role"
                       : "Channel";
+              const accent =
+                c.type === "DM"
+                  ? {
+                      bar: "border-l-violet-500",
+                      chip: "bg-violet-500/20 text-violet-300 border-violet-500/35",
+                      activeBg: "bg-violet-500/15",
+                    }
+                  : {
+                      bar: "border-l-emerald-500",
+                      chip: "bg-emerald-500/20 text-emerald-300 border-emerald-500/35",
+                      activeBg: "bg-emerald-500/15",
+                    };
+              const timeAgo =
+                c.lastMessageAt &&
+                (() => {
+                  try {
+                    return formatDistanceToNow(new Date(c.lastMessageAt), { addSuffix: true });
+                  } catch {
+                    return null;
+                  }
+                })();
               return (
                 <li key={c.id}>
                   <button
                     type="button"
                     onClick={() => openChannel(c)}
                     className={cn(
-                      "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-colors",
-                      active
-                        ? "bg-primary-500/20 border border-primary-500/25"
-                        : "hover:bg-surface-800/80 border border-transparent"
+                      "w-full flex items-center gap-2.5 pl-2 pr-2.5 py-2.5 rounded-xl text-left transition-colors border-l-[3px]",
+                      accent.bar,
+                      active ? cn("border border-surface-600/80", accent.activeBg) : "border border-transparent hover:bg-surface-800/80"
                     )}
                   >
                     {c.type === "DM" && c.peer ? (
@@ -342,13 +424,30 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
                         className="flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-surface-750 flex items-center justify-center flex-shrink-0">
-                        <Hash className="w-4 h-4 text-surface-400" />
+                      <div className="w-9 h-9 rounded-full bg-surface-750 flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/25">
+                        <Hash className="w-4 h-4 text-emerald-400/90" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-surface-100 truncate">{label}</p>
-                      <p className="text-[10px] text-surface-500 truncate">{sub}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-sm font-medium text-surface-100 truncate">{label}</p>
+                        {timeAgo && (
+                          <span className="text-[10px] text-surface-600 flex-shrink-0">{timeAgo}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                        <span
+                          className={cn(
+                            "text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border flex-shrink-0",
+                            accent.chip
+                          )}
+                        >
+                          {kindLabel}
+                        </span>
+                        <p className="text-[10px] text-surface-500 truncate">
+                          {c.lastPreview ?? (c.type === "DM" ? "Direct message" : "No messages yet")}
+                        </p>
+                      </div>
                     </div>
                   </button>
                 </li>
@@ -446,7 +545,41 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
                           {m.author.firstName} {m.author.lastName}
                         </p>
                       )}
-                      <p className="text-xs whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                      {(m.attachments?.length ?? 0) > 0 && (
+                        <div className="flex flex-col gap-1.5 mb-1">
+                          {m.attachments!.map((a, i) =>
+                            a.kind === "image" ? (
+                              <a
+                                key={i}
+                                href={a.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                  "block rounded-lg overflow-hidden max-w-[min(100%,260px)] ring-1",
+                                  mine ? "ring-white/25" : "ring-surface-600"
+                                )}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={a.url}
+                                  alt=""
+                                  className="max-h-52 w-full object-cover"
+                                />
+                              </a>
+                            ) : (
+                              <video
+                                key={i}
+                                src={a.url}
+                                controls
+                                className="max-w-[min(100%,280px)] rounded-lg max-h-56"
+                              />
+                            )
+                          )}
+                        </div>
+                      )}
+                      {m.body?.trim() ? (
+                        <p className="text-xs whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -454,27 +587,71 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
             </div>
 
             <div className="border-t border-surface-800 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-surface-900/90 shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept="image/*,video/mp4,video/webm,video/quicktime"
+                multiple
+                onChange={(e) => void handlePickFiles(e.target.files)}
+              />
+              {stagedMedia.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {stagedMedia.map((a, i) => (
+                    <div key={`${a.url}-${i}`} className="relative group">
+                      {a.kind === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.url} alt="" className="h-16 w-16 object-cover rounded-lg ring-1 ring-surface-600" />
+                      ) : (
+                        <video src={a.url} className="h-16 w-16 object-cover rounded-lg ring-1 ring-surface-600" muted />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setStagedMedia((s) => s.filter((_, j) => j !== i))}
+                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-surface-900 border border-surface-600 flex items-center justify-center text-surface-300 hover:text-white"
+                        aria-label="Remove attachment"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2 items-end">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingMedia || stagedMedia.length >= 8 || sending}
+                  className={cn(
+                    "rounded-2xl px-2.5 py-2.5 flex items-center justify-center flex-shrink-0",
+                    uploadingMedia || stagedMedia.length >= 8
+                      ? "text-surface-600 cursor-not-allowed"
+                      : "text-surface-400 hover:text-primary-400 hover:bg-surface-800"
+                  )}
+                  title="Attach images or videos"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (input.trim()) void send();
+                      if (input.trim() || stagedMedia.length > 0) void send();
                     }
                   }}
-                  placeholder="Message…"
+                  placeholder={stagedMedia.length ? "Add a caption…" : "Message…"}
                   rows={1}
-                  className="flex-1 bg-surface-800/80 border border-surface-700 rounded-2xl px-3 py-2.5 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 resize-none max-h-32"
+                  className="flex-1 bg-surface-800/80 border border-surface-700 rounded-2xl px-3 py-2.5 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 resize-none max-h-32 min-w-0"
                 />
                 <button
                   type="button"
                   onClick={() => void send()}
-                  disabled={!input.trim() || sending}
+                  disabled={(!input.trim() && stagedMedia.length === 0) || sending || uploadingMedia}
                   className={cn(
-                    "rounded-2xl px-3 py-2.5 flex items-center justify-center",
-                    input.trim() && !sending
+                    "rounded-2xl px-3 py-2.5 flex items-center justify-center flex-shrink-0",
+                    (input.trim() || stagedMedia.length > 0) && !sending && !uploadingMedia
                       ? "bg-primary-600 text-white hover:bg-primary-500"
                       : "bg-surface-800 text-surface-500 cursor-not-allowed"
                   )}
