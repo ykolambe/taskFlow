@@ -8,7 +8,7 @@ import Modal from "@/components/ui/Modal";
 import { Input, Select } from "@/components/ui/Input";
 import { TenantTokenPayload } from "@/lib/auth";
 import { User, RoleLevel } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import type { TeamWorkloadRow } from "@/lib/subtreeWorkload";
@@ -550,7 +550,12 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
                       </button>
                     )}
                     <button
-                      onClick={() => { navigator.clipboard.writeText(value); toast.success(`${label} copied`); }}
+                      type="button"
+                      onClick={async () => {
+                        const ok = await copyToClipboard(value);
+                        if (ok) toast.success(`${label} copied`);
+                        else toast.error("Could not copy — select the text manually");
+                      }}
                       className="text-surface-500 hover:text-primary-400 transition-colors p-1"
                       title={`Copy ${label}`}
                     >

@@ -202,3 +202,36 @@ export function getNextDueDate(
 
   return new Date(today.setDate(today.getDate() + 1));
 }
+
+/**
+ * Copy text to the clipboard. Uses the Clipboard API when available; falls back to
+ * `document.execCommand("copy")` so copy works on plain HTTP (e.g. `http://1.2.3.4:3000`),
+ * where `navigator.clipboard` is often blocked (requires secure context).
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}

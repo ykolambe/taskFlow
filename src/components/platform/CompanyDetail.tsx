@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import toast from "react-hot-toast";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -523,7 +523,15 @@ export default function CompanyDetail({ company }: { company: Company }) {
                     <div key={label} className="flex items-center gap-2">
                       <span className="text-xs text-surface-400 w-16">{label}:</span>
                       <code className="text-xs text-emerald-400 flex-1">{value}</code>
-                      <button onClick={() => { navigator.clipboard.writeText(value); toast.success("Copied!"); }} className="text-surface-400 hover:text-surface-100">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await copyToClipboard(value);
+                          if (ok) toast.success("Copied!");
+                          else toast.error("Could not copy — select the text manually");
+                        }}
+                        className="text-surface-400 hover:text-surface-100"
+                      >
                         <Copy className="w-3 h-3" />
                       </button>
                     </div>

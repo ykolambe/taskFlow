@@ -8,6 +8,7 @@ import { TenantTokenPayload } from "@/lib/auth";
 import { RoleLevel } from "@/types";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { copyToClipboard } from "@/lib/utils";
 
 interface Company {
   id: string;
@@ -669,7 +670,19 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
             <span className="text-surface-400">URL Slug</span>
             <div className="flex items-center gap-2">
               <code className="text-primary-400 text-xs">{company.slug}</code>
-              <button onClick={() => { navigator.clipboard.writeText(`http://localhost:3000/t/${company.slug}`); toast.success("URL copied!"); }} className="text-surface-500 hover:text-surface-300">
+              <button
+                type="button"
+                onClick={async () => {
+                  const url =
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/t/${company.slug}`
+                      : `http://localhost:3000/t/${company.slug}`;
+                  const ok = await copyToClipboard(url);
+                  if (ok) toast.success("URL copied!");
+                  else toast.error("Could not copy — select the text manually");
+                }}
+                className="text-surface-500 hover:text-surface-300"
+              >
                 <Copy className="w-3 h-3" />
               </button>
             </div>

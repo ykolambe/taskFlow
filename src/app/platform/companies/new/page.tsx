@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import PlatformLayout from "@/components/layout/PlatformLayout";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { copyToClipboard } from "@/lib/utils";
 
 interface RoleLevelInput {
   name: string;
@@ -105,7 +106,10 @@ export default function NewCompanyPage() {
           </div>
           <div className="space-y-3">
             {[
-              { label: "Company URL", value: `http://localhost:3000/t/${credentials.slug}/login` },
+              {
+                label: "Company URL",
+                value: `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/t/${credentials.slug}/login`,
+              },
               { label: "Super Admin Email", value: credentials.email },
               { label: "Super Admin Password", value: credentials.password },
             ].map(({ label, value }) => (
@@ -114,7 +118,12 @@ export default function NewCompanyPage() {
                 <div className="flex items-center gap-2 bg-surface-900 rounded-lg px-3 py-2.5">
                   <code className="text-sm text-emerald-400 flex-1 break-all">{value}</code>
                   <button
-                    onClick={() => { navigator.clipboard.writeText(value); toast.success("Copied!"); }}
+                    type="button"
+                    onClick={async () => {
+                      const ok = await copyToClipboard(value);
+                      if (ok) toast.success("Copied!");
+                      else toast.error("Could not copy — select the text manually");
+                    }}
                     className="text-surface-400 hover:text-surface-100"
                   >
                     <Copy className="w-3.5 h-3.5" />

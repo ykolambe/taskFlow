@@ -11,7 +11,7 @@ import { ApprovalBadge } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { TenantTokenPayload } from "@/lib/auth";
 import { ApprovalRequest, NewUserData, UserBrief } from "@/types";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, copyToClipboard } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -268,14 +268,22 @@ export default function ApprovalsPage({
               <CredentialRow
                 label="Username"
                 value={credentials.username}
-                onCopy={() => { navigator.clipboard.writeText(credentials.username); toast.success("Copied!"); }}
+                onCopy={async () => {
+                  const ok = await copyToClipboard(credentials.username);
+                  if (ok) toast.success("Copied!");
+                  else toast.error("Could not copy — select the text manually");
+                }}
               />
               <CredentialRow
                 label="Password"
                 value={credentials.password}
                 masked={!showPassword}
                 onToggleMask={() => setShowPassword((s) => !s)}
-                onCopy={() => { navigator.clipboard.writeText(credentials.password); toast.success("Copied!"); }}
+                onCopy={async () => {
+                  const ok = await copyToClipboard(credentials.password);
+                  if (ok) toast.success("Copied!");
+                  else toast.error("Could not copy — select the text manually");
+                }}
               />
             </div>
 

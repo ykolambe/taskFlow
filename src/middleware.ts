@@ -42,13 +42,18 @@ export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "localhost:3000";
   const rootDomain = process.env.ROOT_DOMAIN || "localhost:3000";
 
-  // Skip static files and API routes (API routes handle their own auth)
+  // Skip static uploads and anything that looks like a file path. Middleware runs
+  // before static/route handlers on some stacks — excluding these prefixes avoids
+  // auth/subdomain logic touching public files (fixes new uploads 404 on HTTP/IP).
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    pathname.includes(".") ||
     pathname.startsWith("/uploads") ||
-    pathname.startsWith("/logos")
+    pathname.startsWith("/attachments") ||
+    pathname.startsWith("/avatars") ||
+    pathname.startsWith("/logos") ||
+    pathname.startsWith("/api") ||
+    pathname.includes(".")
   ) {
     return NextResponse.next();
   }
@@ -129,5 +134,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    /*
+     * Do not run middleware for public upload dirs or file-like paths — lets
+     * /attachments, /logos, etc. reach Route Handlers or static files without
+     * subdomain/auth interference.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|uploads/|attachments/|avatars/|logos/|api/).*)",
+  ],
 };

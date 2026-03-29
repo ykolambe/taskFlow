@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Plus, Search, Building2, Users, CheckSquare, ArrowRight, MoreVertical, Copy, RefreshCw, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff } from "lucide-react";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, copyToClipboard } from "@/lib/utils";
 import Button from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/Modal";
 import toast from "react-hot-toast";
@@ -249,7 +249,10 @@ export default function CompanyList({ companies }: { companies: Company[] }) {
             </p>
             <div className="space-y-3">
               {[
-                { label: "Login URL", value: `http://localhost:3000/t/${credModal.slug}/login` },
+                {
+                  label: "Login URL",
+                  value: `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/t/${credModal.slug}/login`,
+                },
                 { label: "Email", value: credModal.email },
                 { label: "Password", value: credModal.password },
               ].map(({ label, value }) => (
@@ -258,7 +261,12 @@ export default function CompanyList({ companies }: { companies: Company[] }) {
                   <div className="flex items-center gap-2 bg-surface-900 rounded-lg px-3 py-2">
                     <code className="text-sm text-emerald-400 flex-1 break-all">{value}</code>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(value); toast.success("Copied!"); }}
+                      type="button"
+                      onClick={async () => {
+                        const ok = await copyToClipboard(value);
+                        if (ok) toast.success("Copied!");
+                        else toast.error("Could not copy — select the text manually");
+                      }}
                       className="text-surface-400 hover:text-surface-100 flex-shrink-0"
                     >
                       <Copy className="w-3.5 h-3.5" />
