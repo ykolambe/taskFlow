@@ -3,6 +3,8 @@ import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
 
+export const dynamic = "force-dynamic";
+
 type Params = { params: Promise<{ slug: string }> | { slug: string } };
 
 function previewFromMessage(m: {

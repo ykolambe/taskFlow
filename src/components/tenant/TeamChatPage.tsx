@@ -70,6 +70,35 @@ interface Props {
   currentUserId: string;
 }
 
+function sortChannelRows(rows: ChannelRow[]): ChannelRow[] {
+  return [...rows].sort((a, b) => {
+    const ta = a.lastMessageAt
+      ? new Date(a.lastMessageAt).getTime()
+      : new Date(a.createdAt).getTime();
+    const tb = b.lastMessageAt
+      ? new Date(b.lastMessageAt).getTime()
+      : new Date(b.createdAt).getTime();
+    return tb - ta;
+  });
+}
+
+/** Matches server preview string so the list updates instantly after send. */
+function buildPreviewFromMessage(m: Message): string {
+  const parts: string[] = [];
+  const t = m.body?.trim();
+  if (t) parts.push(t.length > 72 ? `${t.slice(0, 70)}…` : t);
+  const list = m.attachments ?? [];
+  if (list.length > 0) {
+    const imgs = list.filter((a) => a.kind === "image").length;
+    const vids = list.filter((a) => a.kind === "video").length;
+    const bits: string[] = [];
+    if (imgs) bits.push(imgs === 1 ? "Photo" : `${imgs} photos`);
+    if (vids) bits.push(vids === 1 ? "Video" : `${vids} videos`);
+    if (bits.length) parts.push(bits.join(" · "));
+  }
+  return parts.join(" · ") || "Message";
+}
+
 export default function TeamChatPage({ slug, currentUserId }: Props) {
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<ChannelRow | null>(null);
@@ -100,11 +129,11 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
   }, []);
 
   const loadChannels = useCallback(async () => {
-    const res = await fetch(`/api/t/${slug}/chat/channels`);
+    const res = await fetch(`/api/t/${slug}/chat/channels`, { cache: "no-store" });
     const j = await res.json();
     if (!res.ok) {
       toast.error(j.error || "Could not load channels");
-      return;
+      return undefined;
     }
     const list: ChannelRow[] = j.data ?? [];
     setChannels(list);
@@ -140,15 +169,7 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
           const label = (c.displayName ?? c.name ?? c.slug).toLowerCase();
           return label.includes(q) || c.slug.toLowerCase().includes(q);
         });
-    return [...base].sort((a, b) => {
-      const ta = a.lastMessageAt
-        ? new Date(a.lastMessageAt).getTime()
-        : new Date(a.createdAt).getTime();
-      const tb = b.lastMessageAt
-        ? new Date(b.lastMessageAt).getTime()
-        : new Date(b.createdAt).getTime();
-      return tb - ta;
-    });
+    return sortChannelRows(base);
   }, [channels, listSearch]);
 
   const handlePickFiles = async (files: FileList | null) => {
@@ -246,6 +267,7 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
   const send = async () => {
     const text = input.trim();
     if ((!text && stagedMedia.length === 0) || !selectedChannel) return;
+    const channelId = selectedChannel.id;
     setSending(true);
     try {
       const res = await fetch(`/api/t/${slug}/chat/channels/${selectedChannel.id}/messages`, {
@@ -265,7 +287,27 @@ export default function TeamChatPage({ slug, currentUserId }: Props) {
       setMessages((prev) => [...prev, created]);
       setInput("");
       setStagedMedia([]);
-      void loadChannels();
+
+      const preview = buildPreviewFromMessage(created);
+      const lastAt = created.createdAt;
+      setChannels((prev) =>
+        sortChannelRows(
+          prev.map((c) =>
+            c.id === channelId ? { ...c, lastMessageAt: lastAt, lastPreview: preview } : c
+          )
+        )
+      );
+      setSelectedChannel((sel) =>
+        sel && sel.id === channelId
+          ? { ...sel, lastMessageAt: lastAt, lastPreview: preview }
+          : sel
+      );
+
+      const list = await loadChannels();
+      if (list) {
+        const row = list.find((c) => c.id === channelId);
+        if (row) setSelectedChannel(row);
+      }
     } finally {
       setSending(false);
     }
