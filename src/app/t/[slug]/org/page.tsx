@@ -17,8 +17,10 @@ export default async function OrgChartPage({
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company || !company.isActive) notFound();
 
+  // Load all active users (including bootstrap) so parentId chains resolve. Bootstrap
+  // accounts are hidden from the chart but their reports must attach at the root.
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
+    where: { companyId: company.id, isActive: true },
     include: { roleLevel: true },
     orderBy: { firstName: "asc" },
   });
@@ -41,7 +43,23 @@ export default async function OrgChartPage({
 
   const superAdminOnlyUsers = allUsers.filter((u) => u.isSuperAdmin && !u.roleLevelId);
   const superAdminOnlyIds = new Set(superAdminOnlyUsers.map((u) => u.id));
-  const mainHierarchyUsers = allUsers.filter((u) => !superAdminOnlyIds.has(u.id));
+  const mainHierarchyUsers = allUsers.filter(
+    (u) => !superAdminOnlyIds.has(u.id) && !u.isTenantBootstrapAccount
+  );
+
+  const mainHierarchyIdSet = new Set(mainHierarchyUsers.map((u) => u.id));
+
+  /** Parent for tree edges: root if no parent, or parent not in the drawable org tree (bootstrap / super-only / missing flag). */
+  function effectiveParentId(u: (typeof allUsers)[number]): string | null {
+    const p = u.parentId;
+    if (!p) return null;
+    const parent = allUsers.find((x) => x.id === p);
+    if (!parent) return null;
+    if (parent.isTenantBootstrapAccount) return null;
+    if (parent.isSuperAdmin && !parent.roleLevelId) return null;
+    if (!mainHierarchyIdSet.has(p)) return null;
+    return p;
+  }
 
   function toOrgNode(u: (typeof allUsers)[number]) {
     const rl = u.roleLevel;
@@ -67,13 +85,10 @@ export default async function OrgChartPage({
     };
   }
 
-  // Build main tree (excluding super admins from chain; director stays directly below org).
+  // Build main tree: edges only between drawable nodes; reports of hidden parents attach at root.
   function buildTree(parentId: string | null): any[] {
     return mainHierarchyUsers
-      .filter((u) => {
-        const normalizedParentId = u.parentId && superAdminOnlyIds.has(u.parentId) ? null : u.parentId;
-        return normalizedParentId === parentId;
-      })
+      .filter((u) => effectiveParentId(u) === parentId)
       .map((u) => {
         return {
           ...toOrgNode(u),

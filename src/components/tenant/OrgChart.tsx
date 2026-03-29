@@ -50,7 +50,7 @@ export default function OrgChart({ orgTree, superAdmins = [], currentUserId, com
     loadStats();
   }, [selected, slug]);
 
-  if (orgTree.length === 0) {
+  if (orgTree.length === 0 && superAdmins.length === 0) {
     return (
       <div className="flex flex-col h-full">
         <div className="px-4 sm:px-6 py-4 border-b border-surface-800 flex-shrink-0">
@@ -122,7 +122,7 @@ export default function OrgChart({ orgTree, superAdmins = [], currentUserId, com
         <div
           className={cn(
             "org-tree org-tree-with-company flex flex-col items-center",
-            orgTree.length > 0 && "company-root"
+            (orgTree.length > 0 || superAdmins.length > 0) && "company-root"
           )}
           style={{
             transform: `scale(${zoom})`,
@@ -131,7 +131,7 @@ export default function OrgChart({ orgTree, superAdmins = [], currentUserId, com
             minWidth: "fit-content",
           }}
         >
-          {orgTree.length > 0 && (
+          {(orgTree.length > 0 || superAdmins.length > 0) && (
             <div className="flex flex-col items-center w-full mb-0">
               <div className="flex items-start justify-center gap-6 mb-2">
                 <div className="inline-flex flex-col items-center rounded-2xl border-2 border-primary-500/40 bg-gradient-to-b from-surface-800 to-surface-850 px-5 py-4 shadow-lg shadow-primary-900/20 min-w-[160px] max-w-[280px]">
