@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Users, CheckSquare, ChevronRight, Shield, UserPlus, Copy, Eye, EyeOff, Key, RefreshCw } from "lucide-react";
+import {
+  Search, Plus, Users, CheckSquare, ChevronRight, Shield, UserPlus, UserMinus,
+  Copy, Eye, EyeOff, Key, RefreshCw,
+} from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
@@ -52,6 +55,8 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
   const [selectedRoleLevelId, setSelectedRoleLevelId] = useState<string>("");
   const [memberListPage, setMemberListPage] = useState(1);
   const MEMBER_PAGE_SIZE = 40;
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [removeSubmitting, setRemoveSubmitting] = useState(false);
 
   const filtered = users.filter((u) => {
     const name = `${u.firstName} ${u.lastName} ${u.email} ${u.username}`.toLowerCase();
@@ -74,6 +79,27 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
   // Only if they are super admin OR their level is high enough (level 1 or 2 can direct add)
   const canDirectAdd = currentUser.isSuperAdmin || currentUser.level <= 1;
   const needsApproval = !canDirectAdd;
+
+  const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+
+  const isUnderMyReportingLine = (target: User): boolean => {
+    let cur: string | undefined = target.parentId ?? undefined;
+    const seen = new Set<string>();
+    while (cur) {
+      if (seen.has(cur)) return false;
+      seen.add(cur);
+      if (cur === currentUser.userId) return true;
+      cur = userById.get(cur)?.parentId ?? undefined;
+    }
+    return false;
+  };
+
+  const canProposeRemove = (target: User) => {
+    if (target.id === currentUser.userId) return false;
+    if (target.isSuperAdmin && !currentUser.isSuperAdmin) return false;
+    if (currentUser.isSuperAdmin) return true;
+    return isUnderMyReportingLine(target);
+  };
 
   const handleAddMember = async () => {
     if (!newMember.firstName || !newMember.lastName || !newMember.email || !newMember.roleLevelId) {
@@ -212,6 +238,42 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
       router.refresh();
     } finally {
       setUpdatingSuperAdmin(false);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!selectedUser) return;
+    setRemoveSubmitting(true);
+    try {
+      if (needsApproval) {
+        const res = await fetch(`/api/t/${slug}/approvals`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            newUserData: { kind: "REMOVE", targetUserId: selectedUser.id },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to submit request");
+          return;
+        }
+        toast.success("Removal request submitted — pending approval.");
+      } else {
+        const res = await fetch(`/api/t/${slug}/users/${selectedUser.id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to remove member");
+          return;
+        }
+        toast.success("Team member removed.");
+      }
+      setShowRemoveConfirm(false);
+      setSelectedUser(null);
+      setSelectedStats(null);
+      router.refresh();
+    } finally {
+      setRemoveSubmitting(false);
     }
   };
 
@@ -455,6 +517,25 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
               )}
             </div>
 
+            {canProposeRemove(selectedUser) && (
+              <div className="pt-2 border-t border-surface-700">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setShowRemoveConfirm(true)}
+                >
+                  <UserMinus className="w-3.5 h-3.5" />
+                  {needsApproval ? "Request removal" : "Remove from team"}
+                </Button>
+                {needsApproval && (
+                  <p className="text-[11px] text-surface-500 mt-2 text-center">
+                    Goes through the same manager approval chain as adding a member.
+                  </p>
+                )}
+              </div>
+            )}
+
             {currentUser.isSuperAdmin && (
               <div className="space-y-2">
                 <div className="bg-surface-800 border border-surface-700 rounded-xl p-3 space-y-2 text-left">
@@ -509,6 +590,29 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showRemoveConfirm}
+        onClose={() => setShowRemoveConfirm(false)}
+        title={needsApproval ? "Request removal?" : "Remove this member?"}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-surface-400">
+            {needsApproval
+              ? "Your leadership chain will need to approve before this account is deactivated. Direct reports will roll up to their previous manager after removal."
+              : "This deactivates their account immediately. Direct reports will be moved up one level in the hierarchy."}
+          </p>
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setShowRemoveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" className="flex-1" loading={removeSubmitting} onClick={handleRemoveMember}>
+              {needsApproval ? "Submit request" : "Remove"}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* New member credentials modal (direct add flow) */}

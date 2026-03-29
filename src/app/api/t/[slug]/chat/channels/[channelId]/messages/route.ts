@@ -27,9 +27,12 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
-  // Basic visibility: any user in company can see GLOBAL/CUSTOM.
-  // ROLE channels are visible only if viewer level is <= role level (higher in tree).
-  if (channel.type === "ROLE") {
+  // DM: only the two participants.
+  if (channel.type === "DM") {
+    if (channel.dmUserLowId !== viewer.userId && channel.dmUserHighId !== viewer.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (channel.type === "ROLE") {
     const viewerRow = await prisma.user.findUnique({
       where: { id: viewer.userId },
       select: { roleLevel: { select: { level: true } } },
@@ -101,7 +104,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
-  if (channel.type === "ROLE") {
+  if (channel.type === "DM") {
+    if (channel.dmUserLowId !== viewer.userId && channel.dmUserHighId !== viewer.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (channel.type === "ROLE") {
     const viewerRow = await prisma.user.findUnique({
       where: { id: viewer.userId },
       select: { roleLevel: { select: { level: true } } },

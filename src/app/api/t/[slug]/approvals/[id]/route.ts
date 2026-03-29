@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
 import { getNextRequiredApprover } from "@/lib/approvalChain";
+import { validateTeamMemberRemoval } from "@/lib/teamMemberRemoval";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
@@ -90,7 +91,58 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       return NextResponse.json({ success: true, data: updated });
     }
 
-    // All approvers have approved — create the user
+    const rawPayload = approvalRequest.newUserData as { kind?: string; targetUserId?: string };
+
+    // All approvers have approved — remove member
+    if (rawPayload.kind === "REMOVE") {
+      const targetUserId = rawPayload.targetUserId as string;
+      const target = await prisma.user.findUnique({ where: { id: targetUserId } });
+      if (!target || target.companyId !== company.id) {
+        return NextResponse.json({ error: "User no longer exists in this company" }, { status: 409 });
+      }
+
+      const requesterRow = await prisma.user.findUnique({
+        where: { id: approvalRequest.requesterId },
+        select: { isSuperAdmin: true },
+      });
+      const removal = await validateTeamMemberRemoval(
+        prisma,
+        company.id,
+        approvalRequest.requesterId,
+        Boolean(requesterRow?.isSuperAdmin),
+        {
+          id: target.id,
+          companyId: target.companyId,
+          isTenantBootstrapAccount: target.isTenantBootstrapAccount,
+          isSuperAdmin: target.isSuperAdmin,
+          isActive: target.isActive,
+        }
+      );
+      if (!removal.ok) {
+        return NextResponse.json({ error: removal.error }, { status: 400 });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.updateMany({
+          where: { companyId: company.id, parentId: target.id },
+          data: { parentId: target.parentId },
+        });
+        await tx.user.update({
+          where: { id: target.id },
+          data: { isActive: false },
+        });
+        await tx.approvalRequest.update({ where: { id }, data: { status: "APPROVED" } });
+      });
+
+      const updated = await prisma.approvalRequest.findUnique({
+        where: { id },
+        include: { requester: { select: USER_SELECT }, approvals: { include: { approver: { select: USER_SELECT } } } },
+      });
+
+      return NextResponse.json({ success: true, data: updated, removedUserId: target.id });
+    }
+
+    // All approvers have approved — create the user (add member)
     const newUserData = approvalRequest.newUserData as {
       firstName: string;
       lastName: string;

@@ -26,7 +26,9 @@ export default async function ChatPage({
       slug={slug}
       modules={company.modules}
     >
-      <ChatPageClient slug={slug} />
+      <div className="h-[calc(100dvh-7.25rem)] lg:h-[calc(100dvh-1.5rem)] overflow-hidden flex flex-col min-h-0">
+        <ChatPageClient slug={slug} currentUserId={user.userId} />
+      </div>
     </TenantLayout>
   );
 }

@@ -26,19 +26,55 @@ export async function GET(req: NextRequest, { params }: Params) {
   });
   const viewerLevel = viewerRow?.roleLevel?.level ?? 999;
 
+  const { searchParams } = new URL(req.url);
+  const excludeDm = searchParams.get("excludeDm") === "1" || searchParams.get("excludeDm") === "true";
+
   const channels = await prisma.channel.findMany({
     where: {
       companyId: company.id,
-      OR: [
-        { type: "GLOBAL" },
-        { type: "CUSTOM" },
-        { type: "ROLE", roleLevel: { level: { gte: viewerLevel } } },
-      ],
+      OR: excludeDm
+        ? [
+            { type: "GLOBAL" },
+            { type: "CUSTOM" },
+            { type: "ROLE", roleLevel: { level: { gte: viewerLevel } } },
+          ]
+        : [
+            { type: "GLOBAL" },
+            { type: "CUSTOM" },
+            { type: "ROLE", roleLevel: { level: { gte: viewerLevel } } },
+            {
+              type: "DM",
+              OR: [{ dmUserLowId: viewer.userId }, { dmUserHighId: viewer.userId }],
+            },
+          ],
     },
     orderBy: [{ type: "asc" }, { name: "asc" }],
+    include: {
+      roleLevel: true,
+      dmUserLow: {
+        select: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true },
+      },
+      dmUserHigh: {
+        select: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true },
+      },
+    },
   });
 
-  return NextResponse.json({ success: true, data: channels });
+  const data = channels.map((c) => {
+    if (c.type !== "DM") {
+      const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
+      return rest;
+    }
+    const peer = c.dmUserLowId === viewer.userId ? c.dmUserHigh : c.dmUserLow;
+    const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
+    return {
+      ...rest,
+      peer,
+      displayName: peer ? `${peer.firstName} ${peer.lastName}` : c.name,
+    };
+  });
+
+  return NextResponse.json({ success: true, data });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

@@ -111,6 +111,8 @@ model User {
   ideas              Idea[]
   userReminders      UserReminder[]
   channelMessages    ChannelMessage[]
+  dmChannelsAsLow    Channel[] @relation("ChannelDmLow")
+  dmChannelsAsHigh   Channel[] @relation("ChannelDmHigh")
 
   @@unique([email, companyId])
   @@unique([username, companyId])
@@ -341,16 +343,23 @@ model Channel {
   companyId   String
   slug        String
   name        String
-  type        ChannelType @default(GLOBAL) // GLOBAL | ROLE | CUSTOM
+  type        ChannelType @default(GLOBAL) // GLOBAL | ROLE | CUSTOM | DM
   roleLevelId String?
+  /// For type DM only: participant ids sorted lexicographically (low before high).
+  dmUserLowId  String?
+  dmUserHighId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  roleLevel RoleLevel?      @relation(fields: [roleLevelId], references: [id])
-  messages ChannelMessage[]
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleLevel  RoleLevel?       @relation(fields: [roleLevelId], references: [id])
+  dmUserLow  User?            @relation("ChannelDmLow", fields: [dmUserLowId], references: [id], onDelete: Cascade)
+  dmUserHigh User?            @relation("ChannelDmHigh", fields: [dmUserHighId], references: [id], onDelete: Cascade)
+  messages   ChannelMessage[]
 
   @@unique([companyId, slug])
+  @@index([companyId, dmUserLowId])
+  @@index([companyId, dmUserHighId])
   @@map("channels")
 }
 
@@ -375,6 +384,7 @@ enum ChannelType {
   GLOBAL
   ROLE
   CUSTOM
+  DM
 }
 
 // ─── Ideas (Brain Dump Board) ────────────────────────────────────────────────

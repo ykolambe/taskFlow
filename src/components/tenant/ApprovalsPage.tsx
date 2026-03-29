@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import { ApprovalBadge } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { TenantTokenPayload } from "@/lib/auth";
-import { ApprovalRequest, NewUserData, UserBrief } from "@/types";
+import { ApprovalRequest, NewUserData, UserBrief, isRemoveMemberPayload } from "@/types";
 import { formatRelative, copyToClipboard } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -62,8 +62,9 @@ export default function ApprovalsPage({
       }
 
       if (action === "approve") {
-        // Check if this was the final approval (credentials returned)
-        if (data.credentials) {
+        if (data.removedUserId) {
+          toast.success("All approvals complete — member has been removed.");
+        } else if (data.credentials) {
           setCredentials(data.credentials);
           toast.success("All approvals complete — new member has been added!");
         } else {
@@ -94,7 +95,7 @@ export default function ApprovalsPage({
         <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
           <UserCheck className="w-5 h-5 text-primary-400" /> Approvals
         </h1>
-        <p className="text-surface-400 text-xs mt-0.5">Team member addition requests</p>
+        <p className="text-surface-400 text-xs mt-0.5">Add or remove team members (approval required when applicable)</p>
       </div>
 
       {/* Awaiting my action */}
@@ -206,7 +207,7 @@ export default function ApprovalsPage({
           <UserCheck className="w-12 h-12 text-surface-600 mx-auto mb-3" />
           <p className="text-surface-400 font-medium">No approval requests</p>
           <p className="text-surface-600 text-sm mt-1">
-            Requests to add team members will appear here
+            Requests to add or remove team members will appear here
           </p>
         </div>
       )}
@@ -363,7 +364,10 @@ function ApprovalCard({
   loading?: boolean;
   readonly?: boolean;
 }) {
-  const newUser = request.newUserData as NewUserData;
+  const payload = request.newUserData;
+  const isRemove = isRemoveMemberPayload(payload);
+  const newUser = isRemove ? null : (payload as NewUserData);
+  const removePayload = isRemove ? payload : null;
   const chain = request.approverChain ?? [];
   const nextRequired = getNextRequiredApprover(chain, request.approvals);
   const turnUserId = chain.length === 0 ? request.requesterId : nextRequired;
@@ -409,20 +413,41 @@ function ApprovalCard({
               <span className="text-surface-100 font-semibold">
                 {request.requester.firstName} {request.requester.lastName}
               </span>{" "}
-              wants to add{" "}
-              <span className="text-surface-100 font-semibold">
-                {newUser.firstName} {newUser.lastName}
-              </span>
+              {isRemove ? (
+                <>
+                  wants to remove{" "}
+                  <span className="text-surface-100 font-semibold">
+                    {removePayload!.firstName} {removePayload!.lastName}
+                  </span>
+                </>
+              ) : (
+                <>
+                  wants to add{" "}
+                  <span className="text-surface-100 font-semibold">
+                    {newUser!.firstName} {newUser!.lastName}
+                  </span>
+                </>
+              )}
             </p>
             <p className="text-xs text-surface-500 mt-0.5">
-              as{" "}
-              <span
-                style={{
-                  color: request.requester.roleLevel?.color ?? "#6366f1",
-                }}
-              >
-                {newUser.roleLevelName}
-              </span>{" "}
+              {isRemove ? (
+                <>
+                  <span className="text-red-400/90">Remove from team</span>
+                  {" · "}
+                  {removePayload!.roleLevelName}
+                </>
+              ) : (
+                <>
+                  as{" "}
+                  <span
+                    style={{
+                      color: request.requester.roleLevel?.color ?? "#6366f1",
+                    }}
+                  >
+                    {newUser!.roleLevelName}
+                  </span>
+                </>
+              )}{" "}
               · {formatRelative(request.createdAt)}
             </p>
           </div>
@@ -442,16 +467,26 @@ function ApprovalCard({
         <div className="border-t border-surface-700 px-4 py-4 space-y-4">
           {/* New user details */}
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {[
-              { label: "Email", value: newUser.email },
-              { label: "Username", value: newUser.username || "—" },
-              { label: "Role Level", value: newUser.roleLevelName },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-surface-750 rounded-xl p-3">
-                <p className="text-surface-500 mb-0.5">{label}</p>
-                <p className="text-surface-200 font-medium">{value}</p>
-              </div>
-            ))}
+            {isRemove
+              ? [
+                  { label: "Email", value: removePayload!.email },
+                  { label: "Role", value: removePayload!.roleLevelName },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-surface-750 rounded-xl p-3">
+                    <p className="text-surface-500 mb-0.5">{label}</p>
+                    <p className="text-surface-200 font-medium">{value}</p>
+                  </div>
+                ))
+              : [
+                  { label: "Email", value: newUser!.email },
+                  { label: "Username", value: newUser!.username || "—" },
+                  { label: "Role Level", value: newUser!.roleLevelName },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-surface-750 rounded-xl p-3">
+                    <p className="text-surface-500 mb-0.5">{label}</p>
+                    <p className="text-surface-200 font-medium">{value}</p>
+                  </div>
+                ))}
           </div>
 
           {/* Approval chain progress */}
@@ -592,9 +627,13 @@ function ApprovalCard({
                       <div className="w-4 h-4 rounded-full border-2 border-surface-600 flex-shrink-0" />
                     )}
                     <p className="text-xs text-surface-400">
-                      {request.status === "APPROVED"
-                        ? "New member added to system"
-                        : "Member will be created after all approvals"}
+                      {isRemove
+                        ? request.status === "APPROVED"
+                          ? "Member removed from team"
+                          : "Member will be removed after all approvals"
+                        : request.status === "APPROVED"
+                          ? "New member added to system"
+                          : "Member will be created after all approvals"}
                     </p>
                   </div>
                 </div>

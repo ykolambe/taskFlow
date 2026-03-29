@@ -84,7 +84,7 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
-      const res = await fetch(`/api/t/${slug}/chat/channels`);
+      const res = await fetch(`/api/t/${slug}/chat/channels?excludeDm=true`);
       const j = await res.json();
       if (!res.ok) {
         toast.error(j.error || "Could not load channels");

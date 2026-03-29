@@ -144,13 +144,25 @@ export interface ApprovalRequest {
   id: string;
   companyId: string;
   requesterId: string;
-  newUserData: NewUserData;
+  newUserData: ApprovalRequestPayload;
   approverChain: string[];
   status: ApprovalStatus;
   createdAt: string;
   updatedAt: string;
   requester: UserBrief;
   approvals: ApprovalEntry[];
+}
+
+/** Stored on approval_requests.newUserData — add vs remove member. */
+export type ApprovalRequestPayload = NewUserData | RemoveMemberPayload;
+
+export interface RemoveMemberPayload {
+  kind: "REMOVE";
+  targetUserId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roleLevelName: string;
 }
 
 export interface ApprovalEntry {
@@ -164,6 +176,7 @@ export interface ApprovalEntry {
 }
 
 export interface NewUserData {
+  kind?: "ADD";
   firstName: string;
   lastName: string;
   email: string;
@@ -173,6 +186,12 @@ export interface NewUserData {
   roleLevelLevel: number;
   parentId: string;
   password?: string;
+}
+
+export function isRemoveMemberPayload(
+  data: ApprovalRequestPayload
+): data is RemoveMemberPayload {
+  return (data as RemoveMemberPayload).kind === "REMOVE";
 }
 
 // ─── Idea Board ───────────────────────────────────────────────────────────
