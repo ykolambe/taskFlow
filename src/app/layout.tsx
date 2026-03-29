@@ -18,12 +18,26 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "TaskFlow — Multi-Tenant Task Manager",
   description: "A powerful multi-tenant task management platform",
+  appleWebApp: {
+    capable: true,
+    title: "TaskFlow",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
 };
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#101522",
 };
 
 export default function RootLayout({

@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts"
+    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "pwa:icons": "node scripts/generate-pwa-icons.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1017.0",
@@ -47,6 +48,7 @@
     "eslint-config-next": "14.2.3",
     "postcss": "^8",
     "prisma": "^5.11.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.1",
     "typescript": "^5"
