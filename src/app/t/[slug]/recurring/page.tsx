@@ -3,6 +3,7 @@ import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import RecurringTasksPage from "@/components/tenant/RecurringTasksPage";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 export default async function RecurringPage({
   params,
@@ -18,7 +19,11 @@ export default async function RecurringPage({
 
   // Visible subtree
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: {
+      companyId: company.id,
+      isActive: true,
+      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+    },
     include: { roleLevel: true },
     orderBy: { firstName: "asc" },
   });
@@ -50,10 +55,7 @@ export default async function RecurringPage({
     (u) => (u.roleLevel?.level ?? 0) >= currentLevel
   );
 
-  const pendingApprovals =
-    user.level <= 2
-      ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } })
-      : 0;
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout user={user} companyName={company.name} companyLogoUrl={company.logoUrl} slug={slug} modules={company.modules} pendingApprovals={pendingApprovals}>

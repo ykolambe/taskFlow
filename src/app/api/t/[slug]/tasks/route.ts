@@ -42,7 +42,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const rawSkip = parseInt(searchParams.get("skip") ?? "0", 10);
   const skip = Number.isFinite(rawSkip) && rawSkip > 0 ? rawSkip : 0;
 
-  const allUsers = await prisma.user.findMany({ where: { companyId: company.id }, select: { id: true, parentId: true } });
+  const allUsers = await prisma.user.findMany({
+    where: { companyId: company.id, isTenantBootstrapAccount: false },
+    select: { id: true, parentId: true },
+  });
   const getSubtreeIds = (userId: string): string[] => {
     const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
     return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
@@ -91,7 +94,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const company = await prisma.company.findUnique({ where: { slug } });
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const allUsers2 = await prisma.user.findMany({ where: { companyId: company.id }, select: { id: true, parentId: true } });
+    const allUsers2 = await prisma.user.findMany({
+      where: { companyId: company.id, isTenantBootstrapAccount: false },
+      select: { id: true, parentId: true },
+    });
     const getSubtreeIds2 = (userId: string): string[] => {
       const children = allUsers2.filter((u) => u.parentId === userId).map((u) => u.id);
       return [userId, ...children.flatMap((id) => getSubtreeIds2(id))];

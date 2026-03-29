@@ -15,6 +15,7 @@ import { formatRelative, copyToClipboard } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { getNextRequiredApprover } from "@/lib/approvalChain";
 
 interface Props {
   currentUser: TenantTokenPayload;
@@ -23,17 +24,6 @@ interface Props {
   companyId: string;
   /** Full user map so we can resolve approverChain IDs to names */
   allUsers: UserBrief[];
-}
-
-/** Returns the next user ID that needs to approve, or null if all done */
-function getNextRequiredApprover(
-  chain: string[],
-  existingApprovals: { approverId: string; status: string }[]
-): string | null {
-  const approvedIds = new Set(
-    existingApprovals.filter((a) => a.status === "APPROVED").map((a) => a.approverId)
-  );
-  return chain.find((uid) => !approvedIds.has(uid)) ?? null;
 }
 
 export default function ApprovalsPage({
@@ -109,23 +99,29 @@ export default function ApprovalsPage({
 
       {/* Awaiting my action */}
       {pending.filter((a) => {
-        const next = getNextRequiredApprover(a.approverChain, a.approvals);
-        return next === currentUser.userId || currentUser.isSuperAdmin;
+        const chain = a.approverChain ?? [];
+        const next = getNextRequiredApprover(chain, a.approvals);
+        const turn = chain.length === 0 ? a.requesterId : next;
+        return turn === currentUser.userId;
       }).length > 0 && (
         <div className="mb-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-amber-400 mb-3">
             <Clock className="w-4 h-4" /> Awaiting Your Action (
             {pending.filter((a) => {
-              const next = getNextRequiredApprover(a.approverChain, a.approvals);
-              return next === currentUser.userId || currentUser.isSuperAdmin;
+              const chain = a.approverChain ?? [];
+              const next = getNextRequiredApprover(chain, a.approvals);
+              const turn = chain.length === 0 ? a.requesterId : next;
+              return turn === currentUser.userId;
             }).length}
             )
           </h2>
           <div className="space-y-3">
             {pending
               .filter((a) => {
-                const next = getNextRequiredApprover(a.approverChain, a.approvals);
-                return next === currentUser.userId || currentUser.isSuperAdmin;
+                const chain = a.approverChain ?? [];
+                const next = getNextRequiredApprover(chain, a.approvals);
+                const turn = chain.length === 0 ? a.requesterId : next;
+                return turn === currentUser.userId;
               })
               .map((req) => (
                 <ApprovalCard
@@ -151,8 +147,10 @@ export default function ApprovalsPage({
 
       {/* My submitted requests (pending, not my turn) */}
       {pending.filter((a) => {
-        const next = getNextRequiredApprover(a.approverChain, a.approvals);
-        return a.requesterId === currentUser.userId && next !== currentUser.userId;
+        const chain = a.approverChain ?? [];
+        const next = getNextRequiredApprover(chain, a.approvals);
+        const turn = chain.length === 0 ? a.requesterId : next;
+        return a.requesterId === currentUser.userId && turn !== currentUser.userId;
       }).length > 0 && (
         <div className="mb-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-blue-400 mb-3">
@@ -161,8 +159,10 @@ export default function ApprovalsPage({
           <div className="space-y-3">
             {pending
               .filter((a) => {
-                const next = getNextRequiredApprover(a.approverChain, a.approvals);
-                return a.requesterId === currentUser.userId && next !== currentUser.userId;
+                const chain = a.approverChain ?? [];
+                const next = getNextRequiredApprover(chain, a.approvals);
+                const turn = chain.length === 0 ? a.requesterId : next;
+                return a.requesterId === currentUser.userId && turn !== currentUser.userId;
               })
               .map((req) => (
                 <ApprovalCard
@@ -366,11 +366,13 @@ function ApprovalCard({
   const newUser = request.newUserData as NewUserData;
   const chain = request.approverChain ?? [];
   const nextRequired = getNextRequiredApprover(chain, request.approvals);
+  const turnUserId = chain.length === 0 ? request.requesterId : nextRequired;
 
   const canAct =
     !readonly &&
     request.status === "PENDING" &&
-    (currentUser.isSuperAdmin || currentUser.userId === nextRequired);
+    turnUserId !== null &&
+    currentUser.userId === turnUserId;
 
   const alreadyActed = request.approvals.some(
     (a) => a.approverId === currentUser.userId

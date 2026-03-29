@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isExecutiveDashboardUser } from "@/lib/utils";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TenantDashboard from "@/components/tenant/TenantDashboard";
 
@@ -20,7 +21,11 @@ export default async function DashboardPage({
 
   // Get visible subordinate IDs (users below in hierarchy)
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: {
+      companyId: company.id,
+      isActive: true,
+      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+    },
     include: { roleLevel: true },
   });
 
@@ -44,23 +49,6 @@ export default async function DashboardPage({
   const RECENT_TASKS_PAGE = 5;
   const REMINDER_PAGE = 8;
 
-  // Count approval requests where it is the current user's turn (or all pending for super admin)
-  const countMyPendingApprovals = async (): Promise<number> => {
-    if (user!.isSuperAdmin) {
-      return prisma.approvalRequest.count({ where: { companyId: company!.id, status: "PENDING" } });
-    }
-    const allPending = await prisma.approvalRequest.findMany({
-      where: { companyId: company!.id, status: "PENDING" },
-      select: { approverChain: true, approvals: { select: { approverId: true, status: true } } },
-    });
-    return allPending.filter((req) => {
-      const chain = req.approverChain as string[];
-      const approvedIds = new Set(req.approvals.filter((a) => a.status === "APPROVED").map((a) => a.approverId));
-      const next = chain.find((uid) => !approvedIds.has(uid));
-      return next === user!.userId;
-    }).length;
-  };
-
   // Tasks stats + chart aggregates + totals for pagination hints
   const [
     myTasks,
@@ -82,7 +70,7 @@ export default async function DashboardPage({
         status: { not: "COMPLETED" },
       },
     }),
-    countMyPendingApprovals(),
+    countPendingApprovalsForUser(company.id, user.userId),
     prisma.task.count({
       where: {
         companyId: company.id,

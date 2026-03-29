@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TeamPage from "@/components/tenant/TeamPage";
 import { getDirectReportIds, buildTeamWorkloadRows } from "@/lib/subtreeWorkload";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 export default async function TeamServerPage({
   params,
@@ -21,7 +22,7 @@ export default async function TeamServerPage({
   if (!company || !company.isActive) notFound();
 
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
     include: {
       roleLevel: true,
       _count: { select: { assignedTasks: { where: { isArchived: false, status: { not: "COMPLETED" } } }, children: true } },
@@ -76,7 +77,7 @@ export default async function TeamServerPage({
     new Date()
   );
 
-  const pendingApprovals = user.level <= 2 ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } }) : 0;
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout user={user} companyName={company.name} companyLogoUrl={company.logoUrl} slug={slug} modules={company.modules} pendingApprovals={pendingApprovals}>

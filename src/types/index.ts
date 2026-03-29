@@ -51,6 +51,8 @@ export interface User {
   lastName: string;
   avatarUrl: string | null;
   isSuperAdmin: boolean;
+  /** Default bootstrap super admin; excluded from team/org UX */
+  isTenantBootstrapAccount?: boolean;
   aiLeaderQaEnabled?: boolean;
   isActive: boolean;
   createdAt: string;

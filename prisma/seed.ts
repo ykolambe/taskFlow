@@ -68,6 +68,7 @@ async function main() {
         firstName: "Sarah",
         lastName: "Chen",
         isSuperAdmin: true,
+        isTenantBootstrapAccount: true,
       },
     });
 

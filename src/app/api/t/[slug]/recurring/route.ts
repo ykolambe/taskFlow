@@ -20,7 +20,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     return NextResponse.json({ error: "Recurring module is disabled for this tenant." }, { status: 403 });
   }
 
-  const allUsers = await prisma.user.findMany({ where: { companyId: company.id }, select: { id: true, parentId: true } });
+  const allUsers = await prisma.user.findMany({
+    where: { companyId: company.id, isTenantBootstrapAccount: false },
+    select: { id: true, parentId: true },
+  });
   const getSubtreeIds = (userId: string): string[] => {
     const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
     return [userId, ...children.flatMap((id) => getSubtreeIds(id))];

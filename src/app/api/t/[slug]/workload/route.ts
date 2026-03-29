@@ -25,7 +25,7 @@ export async function GET(
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
     include: { roleLevel: true },
   });
 

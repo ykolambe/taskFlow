@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 
   const [users, roleLevels] = await Promise.all([
     prisma.user.findMany({
-      where: { companyId: company.id, isActive: true },
+      where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
       include: { roleLevel: true },
       orderBy: [{ firstName: "asc" }],
     }),

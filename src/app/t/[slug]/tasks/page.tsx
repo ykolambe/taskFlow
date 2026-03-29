@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Suspense } from "react";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TasksBoard from "@/components/tenant/TasksBoard";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 export default async function TasksPage({
   params,
@@ -29,7 +30,11 @@ export default async function TasksPage({
 
   // Get all users the current user can see
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: {
+      companyId: company.id,
+      isActive: true,
+      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+    },
     include: { roleLevel: true },
     orderBy: [{ roleLevel: { level: "asc" } }, { firstName: "asc" }],
   });
@@ -85,7 +90,7 @@ export default async function TasksPage({
     (u) => (u.roleLevel?.level ?? 0) >= (currentUserData?.roleLevel?.level ?? 0)
   );
 
-  const pendingApprovals = user.level <= 2 ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } }) : 0;
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout user={user} companyName={company.name} companyLogoUrl={company.logoUrl} slug={slug} modules={company.modules} pendingApprovals={pendingApprovals}>

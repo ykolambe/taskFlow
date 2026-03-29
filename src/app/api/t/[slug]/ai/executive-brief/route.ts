@@ -7,6 +7,7 @@ import { getSubtreeIds } from "@/lib/subtreeWorkload";
 import { buildExecutiveBriefPrompt, executiveBriefJsonSchema } from "@/lib/ai/executiveBriefPrompt";
 import { generateGeminiJson } from "@/lib/ai/gemini";
 import { isCompanyAiEnabled } from "@/lib/ai/entitlement";
+import { getNextRequiredApprover } from "@/lib/approvalChain";
 import type { ExecutiveBrief, ExecutiveBriefContext, ExecutiveBriefResponse } from "@/lib/ai/types";
 
 const briefSchema: z.ZodType<ExecutiveBrief> = z.object({
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const next7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   const users = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
     select: {
       id: true,
       firstName: true,
@@ -145,7 +146,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const [
     openTasksRaw,
-    approvalsPending,
     approvalRows,
     remindersDueNext7Days,
     remindersOverdue,
@@ -165,10 +165,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         status: true,
       },
     }),
-    prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } }),
     prisma.approvalRequest.findMany({
       where: { companyId: company.id, status: "PENDING" },
-      select: { approverChain: true, approvals: { select: { approverId: true, status: true } } },
+      select: {
+        requesterId: true,
+        approverChain: true,
+        approvals: { select: { approverId: true, status: true } },
+      },
     }),
     prisma.userReminder.count({
       where: {
@@ -223,16 +226,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     count: openTasks.filter((t) => t.priority === priority).length,
   }));
 
-  const pendingApprovalsForViewer = viewer.isSuperAdmin
-    ? approvalsPending
-    : approvalRows.filter((row) => {
-        const chain = row.approverChain as string[];
-        const approvedIds = new Set(
-          row.approvals.filter((x) => x.status === "APPROVED").map((x) => x.approverId)
-        );
-        const next = chain.find((uid) => !approvedIds.has(uid));
-        return next === viewer.userId;
-      }).length;
+  const pendingApprovalsForViewer = approvalRows.filter((row) => {
+    const chain = row.approverChain as string[];
+    const next = getNextRequiredApprover(chain, row.approvals);
+    const turn = chain.length === 0 ? row.requesterId : next;
+    return turn === viewer.userId;
+  }).length;
 
   const context: ExecutiveBriefContext = {
     companyName: company.name,

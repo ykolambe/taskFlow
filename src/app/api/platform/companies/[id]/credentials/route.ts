@@ -33,6 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         email,
         passwordHash: await bcrypt.hash(password, 12),
         roleLevelId: topLevel.id,
+        isTenantBootstrapAccount: true,
       },
     });
   } else {
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         firstName: "Super",
         lastName: "Admin",
         isSuperAdmin: true,
+        isTenantBootstrapAccount: true,
       },
     });
   }

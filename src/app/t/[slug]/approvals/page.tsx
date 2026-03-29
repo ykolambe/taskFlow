@@ -3,6 +3,7 @@ import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import ApprovalsPage from "@/components/tenant/ApprovalsPage";
+import { getNextRequiredApprover } from "@/lib/approvalChain";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
@@ -27,37 +28,29 @@ export default async function ApprovalsServerPage({
     select: USER_SELECT,
   });
 
-  // Build list of pending request IDs where it is the current user's turn
-  let myTurnIds: string[] = [];
-  if (!user.isSuperAdmin) {
-    const allPending = await prisma.approvalRequest.findMany({
-      where: { companyId: company.id, status: "PENDING" },
-      select: { id: true, approverChain: true, approvals: { select: { approverId: true, status: true } } },
-    });
+  const allPendingForTurn = await prisma.approvalRequest.findMany({
+    where: { companyId: company.id, status: "PENDING" },
+    select: {
+      id: true,
+      requesterId: true,
+      approverChain: true,
+      approvals: { select: { approverId: true, status: true } },
+    },
+  });
 
-    myTurnIds = allPending
-      .filter((req) => {
-        const chain = req.approverChain as string[];
-        const approvedIds = new Set(
-          req.approvals.filter((a) => a.status === "APPROVED").map((a) => a.approverId)
-        );
-        const next = chain.find((uid) => !approvedIds.has(uid));
-        return next === user.userId;
-      })
-      .map((r) => r.id);
-  }
+  const myTurnIds = allPendingForTurn
+    .filter((req) => {
+      const chain = req.approverChain as string[];
+      const next = getNextRequiredApprover(chain, req.approvals);
+      const turn = chain.length === 0 ? req.requesterId : next;
+      return turn === user.userId;
+    })
+    .map((r) => r.id);
 
   const approvals = await prisma.approvalRequest.findMany({
     where: {
       companyId: company.id,
-      ...(user.isSuperAdmin
-        ? {}
-        : {
-            OR: [
-              { requesterId: user.userId },
-              { id: { in: myTurnIds } },
-            ],
-          }),
+      OR: [{ requesterId: user.userId }, { id: { in: myTurnIds } }],
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -68,10 +61,7 @@ export default async function ApprovalsServerPage({
     },
   });
 
-  const pendingApprovals =
-    user.isSuperAdmin || user.level <= 2
-      ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } })
-      : myTurnIds.length;
+  const pendingApprovals = myTurnIds.length;
 
   return (
     <TenantLayout

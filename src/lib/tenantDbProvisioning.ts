@@ -252,6 +252,7 @@ async function seedTenantDatabase(companyId: string, databaseUrl: string): Promi
             bio: u.bio,
             phone: u.phone,
             isSuperAdmin: u.isSuperAdmin,
+            isTenantBootstrapAccount: u.isTenantBootstrapAccount,
             aiLeaderQaEnabled: u.aiLeaderQaEnabled,
             isActive: u.isActive,
           })),

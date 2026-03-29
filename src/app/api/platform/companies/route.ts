@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
           firstName: "Super",
           lastName: "Admin",
           isSuperAdmin: true,
+          isTenantBootstrapAccount: true,
         },
       });
 

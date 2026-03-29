@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getNextRequiredApprover } from "@/lib/approvalChain";
+
+export { getNextRequiredApprover };
 
 const REQUESTER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
   avatarUrl: true, roleLevelId: true, roleLevel: true, isSuperAdmin: true,
 };
 
-/** Walk up parentId chain and return ordered array [directParent, ..., root] */
+/** Walk up parentId chain and return ordered array [directParent, ..., root]. Skips tenant bootstrap accounts. */
 async function buildApproverChain(userId: string): Promise<string[]> {
   const chain: string[] = [];
   let currentId: string | null = userId;
@@ -18,24 +21,20 @@ async function buildApproverChain(userId: string): Promise<string[]> {
       select: { parentId: true },
     });
     if (!record?.parentId) break;
-    chain.push(record.parentId);
+
+    const parentRow = await prisma.user.findUnique({
+      where: { id: record.parentId },
+      select: { isTenantBootstrapAccount: true },
+    });
+    if (!parentRow) break;
+
+    if (!parentRow.isTenantBootstrapAccount) {
+      chain.push(record.parentId);
+    }
     currentId = record.parentId;
   }
 
   return chain;
-}
-
-/** Given a request, return the ID of the next user who needs to approve. */
-export function getNextRequiredApprover(
-  approverChain: string[],
-  existingApprovals: { approverId: string; status: string }[]
-): string | null {
-  const approvedIds = new Set(
-    existingApprovals
-      .filter((a) => a.status === "APPROVED")
-      .map((a) => a.approverId)
-  );
-  return approverChain.find((uid) => !approvedIds.has(uid)) ?? null;
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -46,30 +45,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (user.isSuperAdmin) {
-    // Super admin sees everything
-    const approvals = await prisma.approvalRequest.findMany({
-      where: { companyId: company.id },
-      orderBy: { createdAt: "desc" },
-      include: {
-        requester: { select: REQUESTER_SELECT },
-        approvals: { include: { approver: { select: REQUESTER_SELECT } } },
-      },
-    });
-    return NextResponse.json({ success: true, data: approvals });
-  }
-
-  // For regular users: find all pending requests in the company to check whose turn it is
+  // Pending requests in the company: whose turn is it (including empty chain → requester)
   const allPending = await prisma.approvalRequest.findMany({
     where: { companyId: company.id, status: "PENDING" },
-    select: { id: true, approverChain: true, approvals: { select: { approverId: true, status: true } } },
+    select: {
+      id: true,
+      requesterId: true,
+      approverChain: true,
+      approvals: { select: { approverId: true, status: true } },
+    },
   });
 
   const myTurnIds = allPending
     .filter((req) => {
       const chain = req.approverChain as string[];
       const next = getNextRequiredApprover(chain, req.approvals);
-      return next === user.userId;
+      const turn = chain.length === 0 ? req.requesterId : next;
+      return turn === user.userId;
     })
     .map((r) => r.id);
 

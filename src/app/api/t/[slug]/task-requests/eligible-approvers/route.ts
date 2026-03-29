@@ -30,6 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       where: {
         companyId: company.id,
         isActive: true,
+        isTenantBootstrapAccount: false,
         id: { not: user.userId },
       },
       select: USER_SELECT,
@@ -43,7 +44,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   const approvers = await prisma.user.findMany({
-    where: { id: { in: chainIds }, companyId: company.id, isActive: true },
+    where: {
+      id: { in: chainIds },
+      companyId: company.id,
+      isActive: true,
+      isTenantBootstrapAccount: false,
+    },
     select: USER_SELECT,
   });
 

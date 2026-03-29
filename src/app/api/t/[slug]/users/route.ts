@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const users = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
     include: { roleLevel: true },
     orderBy: [{ firstName: "asc" }],
   });

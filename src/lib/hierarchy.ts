@@ -8,14 +8,20 @@ async function getParentId(userId: string): Promise<string | null> {
   return u?.parentId ?? null;
 }
 
-/** Walk up parentId chain: [directParent, ..., root] — same order as buildApproverChain in approvals. */
+/** Walk up parentId chain: [directParent, ..., root] — same order as buildApproverChain in approvals. Skips tenant bootstrap accounts. */
 export async function getAncestorUserIds(userId: string): Promise<string[]> {
   const chain: string[] = [];
   let cursor = userId;
   for (let i = 0; i < 200; i++) {
     const parentId = await getParentId(cursor);
     if (!parentId) break;
-    chain.push(parentId);
+    const parent = await prisma.user.findUnique({
+      where: { id: parentId },
+      select: { isTenantBootstrapAccount: true },
+    });
+    if (!parent?.isTenantBootstrapAccount) {
+      chain.push(parentId);
+    }
     cursor = parentId;
   }
   return chain;

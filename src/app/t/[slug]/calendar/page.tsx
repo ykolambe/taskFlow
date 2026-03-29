@@ -3,6 +3,7 @@ import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import CalendarView from "@/components/tenant/CalendarView";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, avatarUrl: true,
@@ -23,7 +24,11 @@ export default async function CalendarPage({
 
   // Compute visible subtree
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: {
+      companyId: company.id,
+      isActive: true,
+      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+    },
     select: { id: true, parentId: true },
   });
 
@@ -61,10 +66,7 @@ export default async function CalendarPage({
     },
   });
 
-  const pendingApprovals =
-    user.level <= 2
-      ? await prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } })
-      : 0;
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout

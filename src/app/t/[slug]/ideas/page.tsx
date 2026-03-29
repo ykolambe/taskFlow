@@ -3,6 +3,7 @@ import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import IdeaBoard from "@/components/tenant/IdeaBoard";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 export default async function IdeasPage({
   params,
@@ -24,7 +25,11 @@ export default async function IdeasPage({
 
   // Fetch assignable users for the convert-to-task modal
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: {
+      companyId: company.id,
+      isActive: true,
+      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+    },
     include: { roleLevel: true },
     orderBy: { firstName: "asc" },
   });
@@ -34,13 +39,7 @@ export default async function IdeasPage({
     (u) => (u.roleLevel?.level ?? 0) >= currentLevel
   );
 
-  const pendingApprovals = await prisma.approvalRequest.count({
-    where: {
-      companyId: company.id,
-      status: "PENDING",
-      approverChain: { array_contains: user.userId },
-    },
-  });
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout

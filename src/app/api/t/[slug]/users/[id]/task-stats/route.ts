@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   // Visibility: current user can see themselves + their subtree
   const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
+    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
     select: { id: true, parentId: true },
   });
   const getSubtreeIds = (id: string): string[] => {

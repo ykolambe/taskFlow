@@ -3,7 +3,7 @@ import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
-import { getNextRequiredApprover } from "../route";
+import { getNextRequiredApprover } from "@/lib/approvalChain";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
@@ -40,8 +40,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     const chain = approvalRequest.approverChain as string[];
     const nextRequired = getNextRequiredApprover(chain, approvalRequest.approvals);
 
-    // Permission check: must be the next required approver OR super admin
-    if (!currentUser.isSuperAdmin && currentUser.userId !== nextRequired) {
+    // Permission: must be the next approver in chain (super admin included only when it is their turn).
+    // Empty chain: no manager above requester — only the requester may approve.
+    const allowedActor =
+      chain.length === 0 ? approvalRequest.requesterId : nextRequired;
+    if (allowedActor === null || currentUser.userId !== allowedActor) {
       if (approvalRequest.approvals.some((a) => a.approverId === currentUser.userId)) {
         return NextResponse.json({ error: "You have already acted on this request" }, { status: 400 });
       }
@@ -76,40 +79,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     // Check if all required approvals are now done.
     // Reload approvals to include the one we just created.
     const updatedApprovals = await prisma.approval.findMany({ where: { requestId: id } });
-    const approvedIds = new Set(
-      updatedApprovals
-        .filter((a) => a.status === "APPROVED")
-        .map((a) => a.approverId)
-    );
+    const remainingApprover = getNextRequiredApprover(chain, updatedApprovals);
 
-    const chainUsers = await prisma.user.findMany({
-      where: { id: { in: chain }, companyId: company.id },
-      select: { id: true, isSuperAdmin: true, roleLevel: { select: { level: true } } },
-    });
-    const chainUserById = new Map(chainUsers.map((u) => [u.id, u]));
-
-    // Business rule:
-    // If top-level employee (highest rank non-superadmin in chain) approved,
-    // super-admin-only steps are no longer required.
-    const topEmployeeLevel = chainUsers
-      .filter((u) => !u.isSuperAdmin && u.roleLevel?.level !== null && u.roleLevel?.level !== undefined)
-      .reduce<number | null>((min, u) => {
-        const lvl = u.roleLevel!.level;
-        return min === null ? lvl : Math.min(min, lvl);
-      }, null);
-
-    const topEmployeeApproved =
-      topEmployeeLevel !== null &&
-      chainUsers.some((u) => !u.isSuperAdmin && u.roleLevel?.level === topEmployeeLevel && approvedIds.has(u.id));
-
-    const remainingApprover = chain.find((uid) => {
-      if (approvedIds.has(uid)) return false;
-      if (topEmployeeApproved && chainUserById.get(uid)?.isSuperAdmin) return false;
-      return true;
-    }) ?? null;
-    const approvedBySuperAdmin = currentUser.isSuperAdmin;
-
-    if (!approvedBySuperAdmin && remainingApprover !== null) {
+    if (remainingApprover !== null) {
       // More approvers in the chain — stay PENDING, pass to next person
       const updated = await prisma.approvalRequest.findUnique({
         where: { id },

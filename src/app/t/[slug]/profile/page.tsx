@@ -3,6 +3,7 @@ import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import ProfilePage from "@/components/tenant/ProfilePage";
+import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 
 export default async function ProfileServerPage({
   params,
@@ -22,13 +23,7 @@ export default async function ProfileServerPage({
   });
   if (!dbUser) redirect(`/t/${slug}/login`);
 
-  const pendingApprovals = await prisma.approvalRequest.count({
-    where: {
-      companyId: company.id,
-      status: "PENDING",
-      approverChain: { array_contains: user.userId },
-    },
-  });
+  const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
     <TenantLayout

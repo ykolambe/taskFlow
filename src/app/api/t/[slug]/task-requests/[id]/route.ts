@@ -90,7 +90,7 @@ export async function PATCH(
     const finalAssigneeId = assigneeId && String(assigneeId).trim() ? String(assigneeId).trim() : tr.requesterId;
 
     const allUsers = await prisma.user.findMany({
-      where: { companyId: company.id },
+      where: { companyId: company.id, isTenantBootstrapAccount: false },
       select: { id: true, parentId: true },
     });
 
