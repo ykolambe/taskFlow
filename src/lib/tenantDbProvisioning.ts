@@ -30,9 +30,17 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, "\"\"")}"`;
 }
 
+/** True if the string is a usable Prisma Postgres URL (not a secret ref name). */
+function isPostgresConnectionString(s: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(s.trim());
+}
+
 function buildTenantDatabaseUrl(infra: TenantInfraInput): string {
-  const directUrl = resolveSecretRef(infra.dbUrlSecretRef);
-  if (directUrl) return directUrl;
+  const rawDirect = resolveSecretRef(infra.dbUrlSecretRef);
+  // resolveSecretRef falls back to the ref key itself when env is unset — that is not a URL.
+  if (rawDirect && isPostgresConnectionString(rawDirect)) {
+    return rawDirect.trim();
+  }
 
   if (!infra.dbHost || !infra.dbName) {
     throw new Error("Tenant DB host/name is missing in infra config");
@@ -107,8 +115,14 @@ async function checkDatabaseExistsWithAdmin(infra: TenantInfraInput): Promise<bo
 }
 
 async function runPrismaAgainstDb(databaseUrl: string): Promise<void> {
+  if (!databaseUrl || !isPostgresConnectionString(databaseUrl)) {
+    throw new Error(
+      "Invalid tenant DATABASE_URL for Prisma (must start with postgresql:// or postgres://). " +
+        "If you use dbUrlSecretRef, set that env var to the full connection string, or rely on shared DB user/password env vars."
+    );
+  }
   const strategy = (process.env.PG_PROVISION_PRISMA_STRATEGY ?? "migrate").toLowerCase();
-  const baseEnv = { ...process.env, DATABASE_URL: databaseUrl };
+  const baseEnv = { ...process.env, DATABASE_URL: databaseUrl.trim() };
   const cwd = process.cwd();
   const schemaPath = "prisma/schema.prisma";
 
