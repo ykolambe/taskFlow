@@ -47,6 +47,8 @@ interface Props {
   taskStatuses?: StatusConfig[];
   initialTaskId?: string;
   openNew?: boolean;
+  /** Pre-fill due date from URL (yyyy-MM-dd), e.g. calendar deep link. */
+  initialDueDate?: string;
   /** Open “Request approval” modal on load (e.g. `/tasks?request=1`). */
   openTaskRequest?: boolean;
 }
@@ -61,6 +63,7 @@ export default function TasksBoard({
   taskStatuses,
   initialTaskId,
   openNew,
+  initialDueDate,
   openTaskRequest,
 }: Props) {
   const statusConfigs = taskStatuses?.length ? taskStatuses : DEFAULT_STATUSES;
@@ -83,8 +86,16 @@ export default function TasksBoard({
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const dueFromProps =
+    initialDueDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDueDate) ? initialDueDate : "";
   // New task form
-  const [newTask, setNewTask] = useState({ title: "", description: "", assigneeId: user.userId, priority: "MEDIUM" as Priority, dueDate: "" });
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    assigneeId: user.userId,
+    priority: "MEDIUM" as Priority,
+    dueDate: dueFromProps,
+  });
   const [creating, setCreating] = useState(false);
 
   const doneKeys = statusConfigs.filter((s) => s.type === "DONE").map((s) => s.key);
@@ -92,6 +103,29 @@ export default function TasksBoard({
   useEffect(() => {
     if (openTaskRequest) setShowTaskRequest(true);
   }, [openTaskRequest]);
+
+  /** Calendar / client links: `/tasks?new=1&due=YYYY-MM-DD` */
+  useEffect(() => {
+    const n = searchParams.get("new");
+    const d = searchParams.get("due");
+    if (n !== "1" && !d) return;
+    if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      if (n === "1") setShowNewTask(true);
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("new");
+      next.delete("due");
+      const qs = next.toString();
+      router.replace(qs ? `/t/${slug}/tasks?${qs}` : `/t/${slug}/tasks`, { scroll: false });
+      return;
+    }
+    if (d) setNewTask((prev) => ({ ...prev, dueDate: d }));
+    if (n === "1" || d) setShowNewTask(true);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("new");
+    next.delete("due");
+    const qs = next.toString();
+    router.replace(qs ? `/t/${slug}/tasks?${qs}` : `/t/${slug}/tasks`, { scroll: false });
+  }, [searchParams, slug, router]);
 
   const closeTaskRequestModal = () => {
     setShowTaskRequest(false);
@@ -265,15 +299,15 @@ export default function TasksBoard({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0 max-w-full overflow-x-hidden">
       {/* Header */}
-      <div className="px-4 sm:px-6 py-4 border-b border-surface-800 bg-surface-900 flex-shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div>
+      <div className="px-4 sm:px-6 py-4 border-b border-surface-800 bg-surface-900 flex-shrink-0 min-w-0">
+        <div className="flex flex-col gap-3 mb-3 min-w-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 shrink">
             <h1 className="text-xl font-bold text-surface-100">Tasks</h1>
             <p className="text-surface-400 text-xs mt-0.5">{filteredTasks.length} tasks visible</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 w-full sm:w-auto sm:max-w-[min(100%,42rem)] sm:justify-end">
             {/* List / Kanban toggle */}
             {!showArchived && (
               <div className="flex items-center bg-surface-800 border border-surface-700 rounded-lg p-0.5">
@@ -328,19 +362,21 @@ export default function TasksBoard({
                 </Button>
                 {bulkMode && (
                   <>
-                    <Button size="sm" variant="secondary" onClick={selectAllVisible}>
-                      Select All Visible
+                    <Button size="sm" variant="secondary" onClick={selectAllVisible} className="shrink-0">
+                      <span className="hidden sm:inline">Select All Visible</span>
+                      <span className="sm:hidden">All</span>
                     </Button>
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+                      className="text-red-400 border-red-500/30 hover:bg-red-500/10 shrink-0"
                       loading={bulkDeleting}
                       onClick={handleBulkDelete}
                       disabled={selectedTaskIds.size === 0}
                     >
-                      <Trash2 className="w-4 h-4" />
-                      Delete Selected ({selectedTaskIds.size})
+                      <Trash2 className="w-4 h-4 sm:mr-1" />
+                      <span className="hidden sm:inline">Delete Selected ({selectedTaskIds.size})</span>
+                      <span className="sm:hidden">Del ({selectedTaskIds.size})</span>
                     </Button>
                   </>
                 )}
@@ -348,19 +384,21 @@ export default function TasksBoard({
             )}
             <Link
               href={`/t/${slug}/tasks/requests`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-primary-400 border border-surface-600 rounded-lg px-3 py-1.5 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 shrink-0 text-xs font-medium text-surface-400 hover:text-primary-400 border border-surface-600 rounded-lg px-2.5 sm:px-3 py-1.5 transition-colors"
             >
-              <ClipboardList className="w-4 h-4" />
+              <ClipboardList className="w-4 h-4 flex-shrink-0" />
               <span className="hidden sm:inline">Task requests</span>
               <span className="sm:hidden">Requests</span>
             </Link>
-            <Button variant="outline" onClick={() => setShowTaskRequest(true)} size="sm" title="Create a task request for manager approval">
-              <ClipboardList className="w-4 h-4" />
+            <Button variant="outline" onClick={() => setShowTaskRequest(true)} size="sm" title="Create a task request for manager approval" className="shrink-0">
+              <ClipboardList className="w-4 h-4 flex-shrink-0" />
               <span className="hidden sm:inline">Request approval</span>
               <span className="sm:hidden">Request</span>
             </Button>
-            <Button onClick={() => setShowNewTask(true)} size="sm">
-              <Plus className="w-4 h-4" /> New Task
+            <Button onClick={() => setShowNewTask(true)} size="sm" className="shrink-0">
+              <Plus className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">New Task</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </div>
         </div>

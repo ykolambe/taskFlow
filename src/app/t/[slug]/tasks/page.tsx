@@ -12,8 +12,8 @@ export default async function TasksPage({
 }: {
   params: Promise<{ slug: string }> | { slug: string };
   searchParams:
-    | Promise<{ status?: string; task?: string; new?: string; request?: string }>
-    | { status?: string; task?: string; new?: string; request?: string };
+    | Promise<{ status?: string; task?: string; new?: string; request?: string; due?: string }>
+    | { status?: string; task?: string; new?: string; request?: string; due?: string };
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -105,6 +105,7 @@ export default async function TasksPage({
           taskStatuses={taskStatuses}
           initialTaskId={sp.task}
           openNew={sp.new === "1"}
+          initialDueDate={sp.due}
           openTaskRequest={sp.request === "1"}
         />
       </Suspense>

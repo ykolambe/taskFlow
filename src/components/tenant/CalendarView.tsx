@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import {
-  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle,
+  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus,
 } from "lucide-react";
 import { TenantTokenPayload } from "@/lib/auth";
 import { Task, RecurringTask } from "@/types";
@@ -173,10 +173,10 @@ export default function CalendarView({ user, tasks, recurringTasks, slug }: Prop
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 min-[480px]:flex-row min-[480px]:items-start min-[480px]:justify-between min-w-0">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary-400" />
+            <Calendar className="w-5 h-5 text-primary-400 flex-shrink-0" />
             Calendar
           </h1>
           <p className="text-surface-400 text-sm mt-0.5">
@@ -184,7 +184,7 @@ export default function CalendarView({ user, tasks, recurringTasks, slug }: Prop
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* View toggle */}
           <div className="flex bg-surface-800 border border-surface-700 rounded-xl p-1">
             {(["month", "week"] as const).map((v) => (
@@ -324,19 +324,29 @@ export default function CalendarView({ user, tasks, recurringTasks, slug }: Prop
           {/* Selected day panel */}
           {selectedDate && (
             <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700">
-                <h3 className="font-semibold text-surface-100 text-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-5 py-4 border-b border-surface-700 min-w-0">
+                <h3 className="font-semibold text-surface-100 text-sm min-w-0">
                   {isToday(selectedDate) ? "Today" : format(selectedDate, "EEEE, MMMM d")}
                   <span className="ml-2 text-surface-500 font-normal text-xs">
                     {selectedEvents.length} event{selectedEvents.length !== 1 ? "s" : ""}
                   </span>
                 </h3>
-                <button
-                  onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()); }}
-                  className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
-                >
-                  Today
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Link
+                    href={`/t/${slug}/tasks?new=1&due=${format(selectedDate, "yyyy-MM-dd")}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New task (due this day)
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()); }}
+                    className="text-xs text-primary-400 hover:text-primary-300 transition-colors px-2 py-1.5"
+                  >
+                    Today
+                  </button>
+                </div>
               </div>
 
               {selectedEvents.length === 0 ? (
@@ -513,6 +523,15 @@ function WeekView({
       {/* Selected day events */}
       {selectedDate && (
         <div className="divide-y divide-surface-700/50">
+          <div className="px-4 py-3 border-b border-surface-700/80 bg-surface-800/50">
+            <Link
+              href={`/t/${slug}/tasks?new=1&due=${format(selectedDate, "yyyy-MM-dd")}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New task due on {format(selectedDate, "MMM d")}
+            </Link>
+          </div>
           {(eventMap[dateKey(selectedDate)] ?? []).length === 0 ? (
             <div className="py-12 text-center text-surface-500 text-sm">
               Nothing scheduled for {format(selectedDate, "EEEE, MMMM d")}
