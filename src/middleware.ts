@@ -99,6 +99,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    // Public per-tenant PWA manifest (no cookie; browsers fetch when installing)
+    if (subPath === "/manifest" || subPath === "/manifest/") {
+      return NextResponse.next();
+    }
+
     // Root of tenant → redirect to dashboard or login
     if (subPath === "/" || subPath === "") {
       const token = request.cookies.get(`tenant_${slug}_token`)?.value;

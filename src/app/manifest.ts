@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "TaskFlow — Multi-Tenant Task Manager",
     short_name: "TaskFlow",
     description: "A powerful multi-tenant task management platform",
-    start_url: "/",
+    start_url: "/platform/login",
     scope: "/",
     display: "standalone",
     background_color: "#101522",

@@ -99,7 +99,7 @@ To enable subdomain routing in production, set `ROOT_DOMAIN=yourdomain.com` in `
 
 ## Progressive Web App (PWA)
 
-TaskFlow exposes a [Web App Manifest](https://developer.mozilla.org/en-US/docs/Web/Manifest) (`/manifest.webmanifest`) so users can **Add to Home Screen** / **Install** on supported browsers.
+TaskFlow exposes a root [Web App Manifest](https://developer.mozilla.org/en-US/docs/Web/Manifest) (`/manifest.webmanifest`) for platform flows, and a **per-workspace manifest** at `/t/[slug]/manifest` for tenant routes. Add to Home Screen from a tenant URL (e.g. `/t/yta/login`) uses that manifest so **`start_url`** and **`scope`** apply only to that institute.
 
 - **Production:** Install prompts require a **secure origin** (HTTPS). Use your real domain or a tunnel (e.g. ngrok) for testing install behavior—not plain `http://localhost` on all devices.
 - **Icons:** PNG assets are generated from `public/icon.svg`. After changing the SVG, run:
