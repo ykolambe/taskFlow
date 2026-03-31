@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import Avatar from "@/components/ui/Avatar";
 import { TenantTokenPayload } from "@/lib/auth";
 import toast from "react-hot-toast";
+import BillingStatusBanner from "@/components/tenant/BillingStatusBanner";
 
 export type TenantLayoutUser = TenantTokenPayload & { avatarUrl?: string | null };
 
@@ -85,14 +86,35 @@ export default function TenantLayout({
   pendingApprovals = 0,
 }: TenantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navPremium, setNavPremium] = useState<{ chat: boolean; recurring: boolean } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/t/${encodeURIComponent(slug)}/billing/entitlements`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && typeof d.showChatNav === "boolean") {
+          setNavPremium({ chat: d.showChatNav, recurring: d.showRecurringNav });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   const handleLogout = async () => {
     await fetch(`/api/t/${slug}/logout`, { method: "POST" });
     toast.success("Logged out");
     router.push(`/t/${slug}/login`);
   };
+
+  const companyChatOk = navPremium === null ? modules.includes("chat") : navPremium.chat;
+  const companyRecOk = navPremium === null ? modules.includes("recurring") : navPremium.recurring;
+  const chatNav = companyChatOk && Boolean(user.chatAddonAccess);
+  const recurringNav = companyRecOk && Boolean(user.recurringAddonAccess);
 
   const navItems = [
     { href: `/t/${slug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, show: true },
@@ -105,9 +127,9 @@ export default function TenantLayout({
     },
     { href: `/t/${slug}/team`, label: "Team", icon: Users, show: modules.includes("team") },
     { href: `/t/${slug}/org`, label: "Org Chart", icon: GitBranch, show: modules.includes("org") },
-    { href: `/t/${slug}/chat`, label: "Team Chat", icon: Bell, show: modules.includes("chat") },
+    { href: `/t/${slug}/chat`, label: "Team Chat", icon: Bell, show: chatNav },
     { href: `/t/${slug}/calendar`, label: "Calendar", icon: Calendar, show: modules.includes("tasks") },
-    { href: `/t/${slug}/recurring`, label: "Recurring", icon: RotateCcw, show: modules.includes("recurring") },
+    { href: `/t/${slug}/recurring`, label: "Recurring", icon: RotateCcw, show: recurringNav },
     { href: `/t/${slug}/ideas`, label: "Idea Board", icon: Lightbulb, show: true },
     {
       href: `/t/${slug}/approvals`,
@@ -284,7 +306,10 @@ export default function TenantLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto flex flex-col min-h-0">
+          <BillingStatusBanner slug={slug} />
+          <div className="flex-1 min-h-0">{children}</div>
+        </main>
 
         {/* Mobile Bottom Nav */}
         <nav className="lg:hidden flex items-center bg-surface-900/95 border-t border-surface-800/70 px-2 py-1 backdrop-blur-xl">

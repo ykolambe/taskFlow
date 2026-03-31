@@ -90,6 +90,10 @@ model User {
   /// Default company bootstrap super admin; excluded from team/org lists and approver chains.
   isTenantBootstrapAccount Boolean @default(false)
   aiLeaderQaEnabled Boolean @default(false)
+  /// Per-user grant when company has purchased the chat add-on (Pro).
+  chatAddonAccess     Boolean @default(false)
+  recurringAddonAccess Boolean @default(false)
+  aiAddonAccess       Boolean @default(false)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -113,10 +117,25 @@ model User {
   channelMessages    ChannelMessage[]
   dmChannelsAsLow    Channel[] @relation("ChannelDmLow")
   dmChannelsAsHigh   Channel[] @relation("ChannelDmHigh")
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([email, companyId])
   @@unique([username, companyId])
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ─── Personal reminders (dashboard / exec workflow) ───────────────────────
@@ -467,6 +486,8 @@ model CompanyBilling {
   trialEndsAt        DateTime?
   subscriptionId     String?                        // future: Stripe subscription ID
   subscriptionStatus String    @default("active")  // active | trialing | past_due | canceled
+  /// Stripe current_period_end (access until this instant for canceled subs)
+  subscriptionCurrentPeriodEnd DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -549,6 +570,35 @@ model TenantAiUsageLog {
 
   @@index([companyId, createdAt])
   @@map("tenant_ai_usage_logs")
+}
+
+/// Ephemeral payload between Stripe Checkout creation and webhook completion (self-service signup).
+model PendingTenantSignup {
+  id                String   @id @default(cuid())
+  stripeSessionId   String?  @unique
+  payload           Json
+  createdAt         DateTime @default(now())
+
+  @@map("pending_tenant_signups")
+}
+
+/// One row per email: workspace signup email verification OTP (replaced on each resend).
+model WorkspaceSignupOtp {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("workspace_signup_otps")
+}
+
+model ProcessedStripeEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
+
+  @@map("processed_stripe_events")
 }
 
 enum DeploymentMode {

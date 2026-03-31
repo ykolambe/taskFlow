@@ -5,6 +5,7 @@ import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
 import { getNextRequiredApprover } from "@/lib/approvalChain";
 import { validateTeamMemberRemoval } from "@/lib/teamMemberRemoval";
+import { canAddSeat } from "@/lib/planEntitlements";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
@@ -163,6 +164,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     });
     if (existingEmail) {
       return NextResponse.json({ error: "User with this email already exists in company" }, { status: 409 });
+    }
+
+    const seatCheck = await canAddSeat(company.id);
+    if (!seatCheck.ok) {
+      return NextResponse.json({ error: seatCheck.reason }, { status: 403 });
     }
 
     await prisma.user.create({

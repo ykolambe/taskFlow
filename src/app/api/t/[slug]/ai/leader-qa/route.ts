@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "crypto";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSubtreeIds } from "@/lib/subtreeWorkload";
-import { isCompanyAiEnabled } from "@/lib/ai/entitlement";
+import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { buildLeaderQaPrompt, leaderQaResponseSchema } from "@/lib/ai/leaderQaPrompt";
 import { generateGeminiJson } from "@/lib/ai/gemini";
 import type { LeaderQaAnswer, LeaderQaMetric, LeaderQaResponse } from "@/lib/ai/types";
@@ -206,8 +206,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
-  if (!(await isCompanyAiEnabled(company.id))) {
-    return NextResponse.json({ error: "AI add-on is not enabled for this company." }, { status: 403 });
+  if (!(await isUserAiEnabled(company.id, viewer.userId))) {
+    return NextResponse.json({ error: "AI is not enabled for your account." }, { status: 403 });
   }
   if (!checkRateLimit(company.id, viewer.userId)) {
     return NextResponse.json({ error: "Too many requests. Please wait a few seconds." }, { status: 429 });

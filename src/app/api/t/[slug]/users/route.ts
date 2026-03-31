@@ -3,6 +3,7 @@ import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
+import { canAddSeat } from "@/lib/planEntitlements";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -46,6 +47,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     const company = await prisma.company.findUnique({ where: { slug } });
     if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+
+    const seatCheck = await canAddSeat(company.id);
+    if (!seatCheck.ok) {
+      return NextResponse.json({ error: seatCheck.reason }, { status: 403 });
+    }
 
     const existing = await prisma.user.findFirst({ where: { email: email.toLowerCase(), companyId: company.id } });
     if (existing) return NextResponse.json({ error: "Email already in use" }, { status: 409 });

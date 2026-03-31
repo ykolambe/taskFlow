@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Lock, Eye, EyeOff, User } from "lucide-react";
+import Link from "next/link";
+import { Lock, Eye, EyeOff, Mail } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import toast from "react-hot-toast";
@@ -86,20 +87,22 @@ export default function TenantLoginPage() {
 
           <div className="mb-6">
             <h2 className="text-lg font-bold tracking-tight text-surface-50">Welcome back</h2>
-            <p className="text-surface-500 text-sm mt-0.5">Enter your credentials to continue</p>
+            <p className="text-surface-500 text-sm mt-0.5">Sign in with your email</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Email or Username"
-              type="text"
+              label="Email"
+              type="email"
+              inputMode="email"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="you@company.com"
-              leftIcon={<User className="w-4 h-4" />}
-              autoComplete="username"
+              leftIcon={<Mail className="w-4 h-4" />}
+              autoComplete="email"
               required
             />
+            <p className="text-xs text-surface-600 -mt-2">Use the email you signed up with.</p>
 
             <Input
               label="Password"
@@ -120,6 +123,11 @@ export default function TenantLoginPage() {
               autoComplete="current-password"
               required
             />
+            <div className="flex justify-end -mt-2">
+              <Link href={`/t/${slug}/forgot-password`} className="text-xs text-primary-400 hover:text-primary-300">
+                Forgot password?
+              </Link>
+            </div>
 
             <Button type="submit" className="w-full" size="lg" loading={loading}>
               Sign In →

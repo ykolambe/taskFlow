@@ -5,6 +5,7 @@ import TenantLayout from "@/components/layout/TenantLayout";
 import { CreditCard, Building2, Users, CheckSquare, Lightbulb, AlertCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/Card";
 import { formatDate } from "@/lib/utils";
+import { effectiveSeatLimit } from "@/lib/planEntitlements";
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -44,7 +45,7 @@ export default async function TenantBillingPage({
 
   const pricePerSeat = company.billing?.pricePerSeat ?? config.defaultPricePerSeat;
   const seats = company._count.users;
-  const seatsLimit = company.billing?.seatsLimit ?? null;
+  const enforcedSeatCap = effectiveSeatLimit(company.billing);
   const effectivePlan = company.billing?.plan ?? "FREE";
   const billingCycle = config.billingCycle;
 
@@ -52,7 +53,9 @@ export default async function TenantBillingPage({
     billingCycle === "annual" ? (pricePerSeat * seats * 12) / 12 : pricePerSeat * seats;
 
   const seatsUsedPct =
-    seatsLimit && seatsLimit > 0 ? Math.min(100, Math.round((seats / seatsLimit) * 100)) : null;
+    enforcedSeatCap != null && enforcedSeatCap > 0
+      ? Math.min(100, Math.round((seats / enforcedSeatCap) * 100))
+      : null;
 
   const nextBillingFrequencyLabel = billingCycle === "annual" ? "annualized to monthly" : "monthly";
 
@@ -67,7 +70,8 @@ export default async function TenantBillingPage({
               Usage & Plan
             </h1>
             <p className="text-sm text-surface-400 mt-1">
-              Per-seat pricing is configured by the platform owner. You can view effective pricing here.
+              Pro workspaces are billed by active seat count × your per-seat rate. Add-on features can be assigned per user
+              on the Team page.
             </p>
           </div>
           <div className="hidden sm:block">
@@ -88,7 +92,13 @@ export default async function TenantBillingPage({
           <StatCard
             title="Seats"
             value={`${seats}`}
-            subtitle={seatsLimit ? `Limit ${seatsLimit}` : "Unlimited"}
+            subtitle={
+              enforcedSeatCap != null
+                ? `Cap ${enforcedSeatCap} (Free tier)`
+                : effectivePlan === "PRO"
+                  ? "Unlimited · billed per active seat"
+                  : "Unlimited"
+            }
             icon={<Users className="w-4 h-4" />}
             color="info"
           />
@@ -108,12 +118,12 @@ export default async function TenantBillingPage({
           />
         </div>
 
-        {seatsLimit && (
+        {enforcedSeatCap != null && (
           <div className="bg-surface-800 border border-surface-700 rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-surface-100">Seat usage</p>
               <p className="text-xs text-surface-400">
-                {seats} / {seatsLimit} ({seatsUsedPct ?? 0}%)
+                {seats} / {enforcedSeatCap} ({seatsUsedPct ?? 0}%)
               </p>
             </div>
             <div className="h-2 bg-surface-700 rounded-full overflow-hidden">
@@ -149,7 +159,9 @@ export default async function TenantBillingPage({
             </div>
             <div>
               <p className="text-xs text-surface-500 font-semibold uppercase tracking-widest">Seats limit</p>
-              <p className="text-surface-200 font-semibold">{seatsLimit ?? "Unlimited"}</p>
+              <p className="text-surface-200 font-semibold">
+                {enforcedSeatCap != null ? enforcedSeatCap : effectivePlan === "PRO" ? "Unlimited (bill per seat)" : "Unlimited"}
+              </p>
             </div>
             <div>
               <p className="text-xs text-surface-500 font-semibold uppercase tracking-widest">Billing cycle</p>

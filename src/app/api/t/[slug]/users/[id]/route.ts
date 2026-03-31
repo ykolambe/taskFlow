@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
@@ -37,19 +38,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
   const body = await req.json();
   const { firstName, lastName, isActive, roleLevelId, parentId, aiLeaderQaEnabled, isSuperAdmin } = body;
 
+  const billing = currentUser.isSuperAdmin
+    ? await prisma.companyBilling.findUnique({ where: { companyId: target.companyId } })
+    : null;
+
+  const nextData: Record<string, unknown> = {
+    ...(firstName && { firstName }),
+    ...(lastName && { lastName }),
+    ...(isActive !== undefined && currentUser.isSuperAdmin && { isActive }),
+    ...(Object.prototype.hasOwnProperty.call(body, "roleLevelId") &&
+      currentUser.isSuperAdmin && { roleLevelId: roleLevelId || null }),
+    ...(parentId !== undefined && currentUser.isSuperAdmin && { parentId }),
+    ...(aiLeaderQaEnabled !== undefined &&
+      currentUser.isSuperAdmin && { aiLeaderQaEnabled: Boolean(aiLeaderQaEnabled) }),
+    ...(isSuperAdmin !== undefined && currentUser.isSuperAdmin && { isSuperAdmin: Boolean(isSuperAdmin) }),
+  };
+
+  if (currentUser.isSuperAdmin && billing && body.chatAddonAccess !== undefined) {
+    if (!billing.chatAddonEnabled) {
+      return NextResponse.json({ error: "Company does not have the chat add-on." }, { status: 400 });
+    }
+    nextData.chatAddonAccess = Boolean(body.chatAddonAccess);
+  }
+  if (currentUser.isSuperAdmin && billing && body.recurringAddonAccess !== undefined) {
+    if (!billing.recurringAddonEnabled) {
+      return NextResponse.json({ error: "Company does not have the recurring add-on." }, { status: 400 });
+    }
+    nextData.recurringAddonAccess = Boolean(body.recurringAddonAccess);
+  }
+  if (currentUser.isSuperAdmin && billing && body.aiAddonAccess !== undefined) {
+    if (!billing.aiAddonEnabled) {
+      return NextResponse.json({ error: "Company does not have the AI add-on." }, { status: 400 });
+    }
+    nextData.aiAddonAccess = Boolean(body.aiAddonAccess);
+  }
+
   const updated = await prisma.user.update({
     where: { id },
-    data: {
-      ...(firstName && { firstName }),
-      ...(lastName && { lastName }),
-      ...(isActive !== undefined && currentUser.isSuperAdmin && { isActive }),
-      ...(Object.prototype.hasOwnProperty.call(body, "roleLevelId") &&
-        currentUser.isSuperAdmin && { roleLevelId: roleLevelId || null }),
-      ...(parentId !== undefined && currentUser.isSuperAdmin && { parentId }),
-      ...(aiLeaderQaEnabled !== undefined &&
-        currentUser.isSuperAdmin && { aiLeaderQaEnabled: Boolean(aiLeaderQaEnabled) }),
-      ...(isSuperAdmin !== undefined && currentUser.isSuperAdmin && { isSuperAdmin: Boolean(isSuperAdmin) }),
-    },
+    data: nextData as Prisma.UserUpdateInput,
     include: { roleLevel: true },
   });
 

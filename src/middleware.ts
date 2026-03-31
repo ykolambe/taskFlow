@@ -94,8 +94,15 @@ export async function middleware(request: NextRequest) {
     const slug = tenantMatch[1];
     const subPath = tenantMatch[2] || "/";
 
-    // Allow login page without auth
-    if (subPath === "/login" || subPath === "/login/") {
+    // Allow login / password flows without auth
+    if (
+      subPath === "/login" ||
+      subPath === "/login/" ||
+      subPath === "/forgot-password" ||
+      subPath === "/forgot-password/" ||
+      subPath === "/reset-password" ||
+      subPath === "/reset-password/"
+    ) {
       return NextResponse.next();
     }
 
@@ -128,11 +135,6 @@ export async function middleware(request: NextRequest) {
       res.cookies.delete(`tenant_${slug}_token`);
       return res;
     }
-  }
-
-  // ── Root → redirect to platform login ─────────────────────────────
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/platform/login", request.url));
   }
 
   return NextResponse.next();

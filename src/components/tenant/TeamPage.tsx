@@ -23,10 +23,20 @@ interface Props {
   roleLevels: RoleLevel[];
   slug: string;
   companyId: string;
+  /** Company has purchased these add-ons (Pro); super admin assigns per user below */
+  billingAddons?: { chat: boolean; recurring: boolean; ai: boolean };
   workloadRows?: TeamWorkloadRow[];
 }
 
-export default function TeamPage({ currentUser, users, roleLevels, slug, companyId, workloadRows = [] }: Props) {
+export default function TeamPage({
+  currentUser,
+  users,
+  roleLevels,
+  slug,
+  companyId,
+  billingAddons = { chat: false, recurring: false, ai: false },
+  workloadRows = [],
+}: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterLevel, setFilterLevel] = useState("all");
@@ -57,6 +67,7 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
   const MEMBER_PAGE_SIZE = 40;
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [removeSubmitting, setRemoveSubmitting] = useState(false);
+  const [addonSaving, setAddonSaving] = useState(false);
 
   const filtered = users.filter((u) => {
     const name = `${u.firstName} ${u.lastName} ${u.email} ${u.username}`.toLowerCase();
@@ -92,6 +103,31 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
       cur = userById.get(cur)?.parentId ?? undefined;
     }
     return false;
+  };
+
+  const patchUserAddon = async (
+    target: User,
+    key: "chatAddonAccess" | "recurringAddonAccess" | "aiAddonAccess",
+    value: boolean
+  ) => {
+    setAddonSaving(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/users/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Could not update");
+        return;
+      }
+      setSelectedUser((prev) => (prev && prev.id === target.id ? { ...prev, [key]: value } : prev));
+      toast.success("Saved");
+      router.refresh();
+    } finally {
+      setAddonSaving(false);
+    }
   };
 
   const canProposeRemove = (target: User) => {
@@ -567,15 +603,63 @@ export default function TeamPage({ currentUser, users, roleLevels, slug, company
                     {selectedUser.isSuperAdmin ? "Remove Super Admin" : "Make Super Admin"}
                   </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={updatingQaAccess}
-                  onClick={() => handleToggleQaAccess(selectedUser)}
-                  className="w-full"
-                >
-                  {selectedUser.aiLeaderQaEnabled ? "Disable LeaderGPT Access" : "Enable LeaderGPT Access"}
-                </Button>
+                {(billingAddons.chat || billingAddons.recurring || billingAddons.ai) && (
+                  <div className="bg-surface-800 border border-surface-700 rounded-xl p-3 space-y-2 text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-400">
+                      Paid add-ons (this user)
+                    </p>
+                    <p className="text-[11px] text-surface-500">
+                      Company subscribes to add-ons; choose who can use each feature.
+                    </p>
+                    {billingAddons.chat && (
+                      <label className="flex items-center justify-between gap-2 text-sm text-surface-200 cursor-pointer">
+                        <span>Team chat</span>
+                        <input
+                          type="checkbox"
+                          className="rounded border-surface-600"
+                          checked={selectedUser.chatAddonAccess ?? false}
+                          disabled={addonSaving}
+                          onChange={(e) => void patchUserAddon(selectedUser, "chatAddonAccess", e.target.checked)}
+                        />
+                      </label>
+                    )}
+                    {billingAddons.recurring && (
+                      <label className="flex items-center justify-between gap-2 text-sm text-surface-200 cursor-pointer">
+                        <span>Recurring tasks</span>
+                        <input
+                          type="checkbox"
+                          className="rounded border-surface-600"
+                          checked={selectedUser.recurringAddonAccess ?? false}
+                          disabled={addonSaving}
+                          onChange={(e) => void patchUserAddon(selectedUser, "recurringAddonAccess", e.target.checked)}
+                        />
+                      </label>
+                    )}
+                    {billingAddons.ai && (
+                      <label className="flex items-center justify-between gap-2 text-sm text-surface-200 cursor-pointer">
+                        <span>AI (Executive Brief &amp; tools)</span>
+                        <input
+                          type="checkbox"
+                          className="rounded border-surface-600"
+                          checked={selectedUser.aiAddonAccess ?? false}
+                          disabled={addonSaving}
+                          onChange={(e) => void patchUserAddon(selectedUser, "aiAddonAccess", e.target.checked)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+                {billingAddons.ai && (selectedUser.aiAddonAccess ?? false) && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={updatingQaAccess}
+                    onClick={() => handleToggleQaAccess(selectedUser)}
+                    className="w-full"
+                  >
+                    {selectedUser.aiLeaderQaEnabled ? "Disable LeaderGPT Access" : "Enable LeaderGPT Access"}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="secondary"

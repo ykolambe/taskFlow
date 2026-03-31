@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isModuleEnabledForCompany } from "@/lib/tenantRuntime";
+import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 type Params = { params: Promise<{ slug: string }> | { slug: string } };
 
@@ -19,8 +19,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { id: true },
   });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!(await isModuleEnabledForCompany(company.id, "chat"))) {
-    return NextResponse.json({ error: "Chat module is disabled for this tenant." }, { status: 403 });
+  if (!(await isModuleEnabledForUser(company.id, viewer.userId, "chat"))) {
+    return NextResponse.json({ error: "Chat is not available for your account." }, { status: 403 });
   }
 
   let body: { peerUserId?: string };

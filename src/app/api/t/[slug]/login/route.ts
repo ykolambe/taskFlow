@@ -44,6 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
+      chatAddonAccess: user.chatAddonAccess,
+      recurringAddonAccess: user.recurringAddonAccess,
+      aiAddonAccess: user.aiAddonAccess,
     });
 
     const res = NextResponse.json({ success: true, firstName: user.firstName, lastName: user.lastName });

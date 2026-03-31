@@ -6,7 +6,7 @@ import { isExecutiveDashboardUser } from "@/lib/utils";
 import { getSubtreeIds } from "@/lib/subtreeWorkload";
 import { buildExecutiveBriefPrompt, executiveBriefJsonSchema } from "@/lib/ai/executiveBriefPrompt";
 import { generateGeminiJson } from "@/lib/ai/gemini";
-import { isCompanyAiEnabled } from "@/lib/ai/entitlement";
+import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { getNextRequiredApprover } from "@/lib/approvalChain";
 import type { ExecutiveBrief, ExecutiveBriefContext, ExecutiveBriefResponse } from "@/lib/ai/types";
 
@@ -111,8 +111,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
-  if (!(await isCompanyAiEnabled(company.id))) {
-    return NextResponse.json({ error: "AI add-on is not enabled for this company." }, { status: 403 });
+  if (!(await isUserAiEnabled(company.id, viewer.userId))) {
+    return NextResponse.json({ error: "AI is not enabled for your account." }, { status: 403 });
   }
 
   if (!checkRateLimit(company.id, viewer.userId)) {

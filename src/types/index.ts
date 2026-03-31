@@ -54,6 +54,9 @@ export interface User {
   /** Default bootstrap super admin; excluded from team/org UX */
   isTenantBootstrapAccount?: boolean;
   aiLeaderQaEnabled?: boolean;
+  chatAddonAccess?: boolean;
+  recurringAddonAccess?: boolean;
+  aiAddonAccess?: boolean;
   isActive: boolean;
   createdAt: string;
   roleLevel: RoleLevel;

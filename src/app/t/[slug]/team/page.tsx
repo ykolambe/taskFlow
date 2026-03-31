@@ -17,7 +17,7 @@ export default async function TeamServerPage({
 
   const company = await prisma.company.findUnique({
     where: { slug },
-    include: { roleLevels: { orderBy: { level: "asc" } } },
+    include: { roleLevels: { orderBy: { level: "asc" } }, billing: true },
   });
   if (!company || !company.isActive) notFound();
 
@@ -87,6 +87,11 @@ export default async function TeamServerPage({
         roleLevels={company.roleLevels}
         slug={slug}
         companyId={company.id}
+        billingAddons={{
+          chat: company.billing?.chatAddonEnabled ?? false,
+          recurring: company.billing?.recurringAddonEnabled ?? false,
+          ai: company.billing?.aiAddonEnabled ?? false,
+        }}
         workloadRows={workloadRows}
       />
     </TenantLayout>

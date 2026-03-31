@@ -27,6 +27,10 @@ export interface TenantTokenPayload {
   firstName: string;
   lastName: string;
   email: string;
+  /** Per-user add-on grants (refreshed in getTenantUserFresh from DB) */
+  chatAddonAccess?: boolean;
+  recurringAddonAccess?: boolean;
+  aiAddonAccess?: boolean;
 }
 
 export type TokenPayload = PlatformTokenPayload | TenantTokenPayload;
@@ -102,7 +106,15 @@ export async function getTenantUserFresh(
   try {
     const dbUser = await prisma.user.findUnique({
       where: { id: token.userId },
-      select: { firstName: true, lastName: true, email: true, avatarUrl: true },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+        avatarUrl: true,
+        chatAddonAccess: true,
+        recurringAddonAccess: true,
+        aiAddonAccess: true,
+      },
     });
     if (!dbUser) return null;
 
@@ -112,6 +124,9 @@ export async function getTenantUserFresh(
       lastName: dbUser.lastName,
       email: dbUser.email,
       avatarUrl: dbUser.avatarUrl ?? null,
+      chatAddonAccess: dbUser.chatAddonAccess,
+      recurringAddonAccess: dbUser.recurringAddonAccess,
+      aiAddonAccess: dbUser.aiAddonAccess,
     };
   } catch {
     return token as TenantTokenPayload & { avatarUrl: string | null };

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isPaidSubscriptionAccessOk } from "@/lib/planEntitlements";
 
 export interface ResolvedTenantRuntime {
   companyId: string;
@@ -34,7 +35,14 @@ export async function resolveTenantRuntimeBySlug(slug: string): Promise<Resolved
   };
 }
 
-export async function isModuleEnabledForCompany(companyId: string, moduleKey: "chat" | "recurring"): Promise<boolean> {
+/**
+ * Company has purchased the module + subscription is active + this user is granted access.
+ */
+export async function isModuleEnabledForUser(
+  companyId: string,
+  userId: string,
+  moduleKey: "chat" | "recurring"
+): Promise<boolean> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
@@ -43,14 +51,26 @@ export async function isModuleEnabledForCompany(companyId: string, moduleKey: "c
         select: {
           chatAddonEnabled: true,
           recurringAddonEnabled: true,
+          plan: true,
+          subscriptionStatus: true,
+          subscriptionCurrentPeriodEnd: true,
         },
       },
     },
   });
   if (!company) return false;
 
-  const hasModule = company.modules.includes(moduleKey);
-  const hasAddon = moduleKey === "chat" ? Boolean(company.billing?.chatAddonEnabled) : Boolean(company.billing?.recurringAddonEnabled);
-  return hasModule && hasAddon;
-}
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { chatAddonAccess: true, recurringAddonAccess: true },
+  });
+  if (!user) return false;
 
+  const hasModule = company.modules.includes(moduleKey);
+  const hasCompanyAddon =
+    moduleKey === "chat" ? Boolean(company.billing?.chatAddonEnabled) : Boolean(company.billing?.recurringAddonEnabled);
+  const hasUserGrant = moduleKey === "chat" ? user.chatAddonAccess : user.recurringAddonAccess;
+  if (!hasModule || !hasCompanyAddon || !hasUserGrant) return false;
+  if (!company.billing || !isPaidSubscriptionAccessOk(company.billing)) return false;
+  return true;
+}
