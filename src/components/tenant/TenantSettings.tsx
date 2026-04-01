@@ -384,7 +384,9 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
           <div>
             <p className="font-semibold text-surface-100">{user.firstName} {user.lastName}</p>
             <p className="text-sm text-surface-400">{user.email}</p>
-            <span className="text-xs bg-primary-500/20 text-primary-400 px-2 py-0.5 rounded-full">Super Admin</span>
+            {user.isSuperAdmin && (
+              <span className="text-xs bg-primary-500/20 text-primary-400 px-2 py-0.5 rounded-full">Super Admin</span>
+            )}
           </div>
         </div>
         <Button size="sm" variant="secondary" onClick={() => setShowPasswordForm(!showPasswordForm)}>

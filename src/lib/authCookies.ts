@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
-
-const WEEK_SEC = 60 * 60 * 24 * 7;
+import { getSessionMaxAgeSeconds } from "@/lib/sessionDuration";
 
 /**
  * Whether auth session cookies should use the Secure attribute.
@@ -8,6 +7,9 @@ const WEEK_SEC = 60 * 60 * 24 * 7;
  * - In development, use Secure when the client connected over HTTPS (ngrok, Cloudflare Tunnel, etc.)
  *   via x-forwarded-proto or the request URL.
  * Optional override: COOKIE_SECURE=true | false
+ *
+ * Plain HTTP (e.g. http://IP:3000) cannot persist Secure cookies; browsers drop Set-Cookie.
+ * Use HTTPS in production, or set COOKIE_SECURE=false only for trusted HTTP test deployments.
  */
 export function shouldUseSecureAuthCookies(req: NextRequest): boolean {
   const override = process.env.COOKIE_SECURE?.toLowerCase();
@@ -36,7 +38,7 @@ export function authSessionCookieOptions(req: NextRequest) {
     httpOnly: true as const,
     secure: shouldUseSecureAuthCookies(req),
     sameSite: "lax" as const,
-    maxAge: WEEK_SEC,
+    maxAge: getSessionMaxAgeSeconds(),
     path: "/",
   };
 }

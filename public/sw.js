@@ -1,7 +1,7 @@
 /* global self, caches, fetch */
 
 const STATIC_CACHE = "taskflow-static-v1";
-const RUNTIME_CACHE = "taskflow-runtime-v1";
+const RUNTIME_CACHE = "taskflow-runtime-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -52,7 +52,16 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Keep auth-sensitive app/API routes network-first.
+  // Top-level document loads to tenant/platform: never cache (avoids stale login UI in PWA).
+  if (
+    request.mode === "navigate" &&
+    (url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/"))
+  ) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // Keep auth-sensitive app/API routes network-first (non-navigate GETs may still cache).
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/")) {
     event.respondWith(networkFirst(request));
     return;

@@ -42,13 +42,16 @@ export default function TeamPage({
   const [filterLevel, setFilterLevel] = useState("all");
   const [showAddMember, setShowAddMember] = useState(false);
   const [addingMember, setAddingMember] = useState(false);
+  const defaultParentIdForNewMember = () =>
+    currentUser.isSuperAdmin ? "" : currentUser.userId;
+
   const [newMember, setNewMember] = useState({
     firstName: "",
     lastName: "",
     email: "",
     username: "",
     roleLevelId: "",
-    parentId: currentUser.userId,
+    parentId: defaultParentIdForNewMember(),
   });
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedStats, setSelectedStats] = useState<{
@@ -86,12 +89,16 @@ export default function TeamPage({
   );
   const hasMoreMembers = filtered.length > memberListPage * MEMBER_PAGE_SIZE;
 
-  // Can current user directly add members?
-  // Only if they are super admin OR their level is high enough (level 1 or 2 can direct add)
+  // Super admins always direct-add (no approval). Others only if near top of hierarchy (level ≤ 1).
   const canDirectAdd = currentUser.isSuperAdmin || currentUser.level <= 1;
   const needsApproval = !canDirectAdd;
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+
+  const minRoleLevel = useMemo(
+    () => (roleLevels.length ? Math.min(...roleLevels.map((r) => r.level)) : 1),
+    [roleLevels]
+  );
 
   const isUnderMyReportingLine = (target: User): boolean => {
     let cur: string | undefined = target.parentId ?? undefined;
@@ -144,12 +151,16 @@ export default function TeamPage({
     }
     setAddingMember(true);
     try {
+      const newUserPayload = {
+        ...newMember,
+        parentId: newMember.parentId || null,
+      };
       if (needsApproval) {
         // Send approval request
         const res = await fetch(`/api/t/${slug}/approvals`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ newUserData: newMember }),
+          body: JSON.stringify({ newUserData: newUserPayload }),
         });
         const data = await res.json();
         if (!res.ok) { toast.error(data.error || "Failed"); return; }
@@ -159,7 +170,7 @@ export default function TeamPage({
         const res = await fetch(`/api/t/${slug}/users`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newMember),
+          body: JSON.stringify(newUserPayload),
         });
         const data = await res.json();
         if (!res.ok) { toast.error(data.error || "Failed"); return; }
@@ -172,7 +183,14 @@ export default function TeamPage({
         router.refresh();
       }
       setShowAddMember(false);
-      setNewMember({ firstName: "", lastName: "", email: "", username: "", roleLevelId: "", parentId: currentUser.userId });
+      setNewMember({
+        firstName: "",
+        lastName: "",
+        email: "",
+        username: "",
+        roleLevelId: "",
+        parentId: defaultParentIdForNewMember(),
+      });
     } finally {
       setAddingMember(false);
     }
@@ -347,7 +365,20 @@ export default function TeamPage({
           <h1 className="text-xl font-bold text-surface-100">Team</h1>
           <p className="text-surface-400 text-xs mt-0.5">{users.length} members visible</p>
         </div>
-        <Button onClick={() => setShowAddMember(true)} size="sm">
+        <Button
+          onClick={() => {
+            setNewMember({
+              firstName: "",
+              lastName: "",
+              email: "",
+              username: "",
+              roleLevelId: "",
+              parentId: defaultParentIdForNewMember(),
+            });
+            setShowAddMember(true);
+          }}
+          size="sm"
+        >
           <UserPlus className="w-4 h-4" />
           {needsApproval ? "Request Member" : "Add Member"}
         </Button>
@@ -449,15 +480,29 @@ export default function TeamPage({
               .filter((rl) => (currentUser.isSuperAdmin ? true : rl.level > currentUser.level)) // Super admin can assign any level
               .map((rl) => <option key={rl.id} value={rl.id}>{rl.name}</option>)}
           </Select>
-          <Select label="Reports To" value={newMember.parentId} onChange={(e) => setNewMember({ ...newMember, parentId: e.target.value })}>
-            {users
-              .filter((u) => (u.roleLevel?.level ?? 0) < (roleLevels.find((r) => r.id === newMember.roleLevelId)?.level ?? 999))
-              .map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.firstName} {u.lastName} — {u.roleLevel?.name ?? "No Role"}
-                  {u.id === currentUser.userId ? " (me)" : ""}
-                </option>
-              ))}
+          <Select
+            label="Reports To"
+            value={newMember.parentId}
+            onChange={(e) => setNewMember({ ...newMember, parentId: e.target.value })}
+          >
+            {(() => {
+              const targetRl = roleLevels.find((r) => r.id === newMember.roleLevelId);
+              const targetLv = targetRl?.level ?? 999;
+              const allowNoManager =
+                currentUser.isSuperAdmin || (targetRl !== undefined && targetRl.level === minRoleLevel);
+              const candidates = users.filter((u) => (u.roleLevel?.level ?? 999) < targetLv);
+              return (
+                <>
+                  {allowNoManager && <option value="">— No manager (organization root) —</option>}
+                  {candidates.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.firstName} {u.lastName} — {u.roleLevel?.name ?? "No Role"}
+                      {u.id === currentUser.userId ? " (me)" : ""}
+                    </option>
+                  ))}
+                </>
+              );
+            })()}
           </Select>
           {needsApproval && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">

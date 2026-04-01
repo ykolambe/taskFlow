@@ -107,7 +107,8 @@ TaskFlow exposes a root [Web App Manifest](https://developer.mozilla.org/en-US/d
   npm run pwa:icons
   ```
 - **Checking:** Chrome DevTools → **Application** → **Manifest**. On iOS Safari: **Share** → **Add to Home Screen**.
-- **Service worker:** A minimal SW is now included at `/sw.js` and registered from root layout for installability. It uses **network-first** for app/API routes and conservative cache-first for static assets.
+- **Service worker:** A minimal SW is now included at `/sw.js` and registered from root layout for installability. It uses **network-first** for app/API routes and conservative cache-first for static assets. **Document navigations** to `/t/*` and `/platform/*` are **never cached** so the server always sees cookies (avoids a stale login shell after closing the PWA).
+- **Staying logged in:** Sessions use httpOnly cookies (`JWT` + `maxAge` aligned). If users must sign in every time after closing the app, the usual cause is **Secure cookies on plain HTTP** (production builds set `Secure=true`; browsers will not store the cookie over `http://`). Fix with **HTTPS**, or set `COOKIE_SECURE=false` only for trusted HTTP test deployments. Optional: `SESSION_MAX_AGE_DAYS` (default 7, max 365) in `.env` for longer sessions.
 
 ---
 

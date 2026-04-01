@@ -43,7 +43,8 @@ export default async function TeamServerPage({
   }
 
   const visibleIds = new Set([...getSubtreeIdsLocal(user.userId), ...getAncestorIds(user.userId)]);
-  const visibleUsers = allUsers.filter((u) => visibleIds.has(u.id));
+  // Super admins manage the whole org: full member list, parent pickers, and direct add without subtree limits.
+  const visibleUsers = user.isSuperAdmin ? allUsers : allUsers.filter((u) => visibleIds.has(u.id));
 
   const subtreeRefs = allUsers.map((u) => ({ id: u.id, parentId: u.parentId }));
   const directReportIds = getDirectReportIds(subtreeRefs, user.userId);

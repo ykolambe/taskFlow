@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { hydrateTenantPrisma, prisma, setTenantDbContext } from "@/lib/prisma";
+import { getJwtExpirationDurationString } from "@/lib/sessionDuration";
 
 const getSecret = () =>
   new TextEncoder().encode(
@@ -41,7 +42,7 @@ export async function signToken(payload: TokenPayload): Promise<string> {
   return new SignJWT(payload as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(getJwtExpirationDurationString())
     .sign(getSecret());
 }
 
@@ -111,6 +112,7 @@ export async function getTenantUserFresh(
         lastName: true,
         email: true,
         avatarUrl: true,
+        isSuperAdmin: true,
         chatAddonAccess: true,
         recurringAddonAccess: true,
         aiAddonAccess: true,
@@ -124,6 +126,7 @@ export async function getTenantUserFresh(
       lastName: dbUser.lastName,
       email: dbUser.email,
       avatarUrl: dbUser.avatarUrl ?? null,
+      isSuperAdmin: Boolean(dbUser.isSuperAdmin),
       chatAddonAccess: dbUser.chatAddonAccess,
       recurringAddonAccess: dbUser.recurringAddonAccess,
       aiAddonAccess: dbUser.aiAddonAccess,
