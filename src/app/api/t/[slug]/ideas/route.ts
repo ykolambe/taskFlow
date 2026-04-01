@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -70,18 +71,35 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
-    const idea = await prisma.idea.create({
-      data: {
-        companyId: user.companyId,
-        userId: user.userId,
-        title: title.trim(),
-        body: body?.trim() || null,
-        color: color || "#6366f1",
-        tags: sanitizeTags(tags),
-        pages: sanitizePages(pages),
-        status: status || "IDEA",
-      },
-    });
+    let idea;
+    try {
+      idea = await prisma.idea.create({
+        data: {
+          companyId: user.companyId,
+          userId: user.userId,
+          title: title.trim(),
+          body: body?.trim() || null,
+          color: color || "#6366f1",
+          tags: sanitizeTags(tags),
+          pages: sanitizePages(pages),
+          status: status || "IDEA",
+        },
+      });
+    } catch (e) {
+      const isMissingColumn = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2022";
+      if (!isMissingColumn) throw e;
+      // Fallback for environments where DB migration has not yet added tags/pages.
+      idea = await prisma.idea.create({
+        data: {
+          companyId: user.companyId,
+          userId: user.userId,
+          title: title.trim(),
+          body: body?.trim() || null,
+          color: color || "#6366f1",
+          status: status || "IDEA",
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, data: idea }, { status: 201 });
   } catch (err) {

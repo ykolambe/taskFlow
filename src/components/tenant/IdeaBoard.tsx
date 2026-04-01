@@ -72,6 +72,13 @@ function normalizeIdea(idea: Idea): RichIdea {
   return { ...idea, tags, pages };
 }
 
+function makeId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `pg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function TagChip({ tag }: { tag: IdeaTag }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px]" style={{ borderColor: `${tag.color}80`, color: tag.color, backgroundColor: `${tag.color}20` }}>
@@ -89,7 +96,7 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
   const isDropped = idea.status === "DROPPED";
 
   return (
-    <div className={cn("group relative bg-surface-800 border rounded-2xl p-4 transition-all duration-200", "hover:border-surface-600 hover:shadow-lg hover:shadow-black/20", isDropped ? "opacity-50" : "")} style={{ borderColor: idea.color + "40" }}>
+    <div onClick={() => onEdit(idea)} className={cn("group relative bg-surface-800 border rounded-2xl p-4 transition-all duration-200 cursor-pointer", "hover:border-surface-600 hover:shadow-lg hover:shadow-black/20", isDropped ? "opacity-50" : "")} style={{ borderColor: idea.color + "40" }}>
       <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ backgroundColor: idea.color }} />
       <div className="flex items-start gap-2 mb-2.5">
         <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: idea.color }} />
@@ -117,7 +124,7 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
 
       <div className="flex items-center justify-between mt-auto">
         <div className="relative">
-          <button onClick={() => setShowStatusMenu((v) => !v)} disabled={isConverted} className={cn("flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border transition-all", statusCfg.className, !isConverted && "hover:opacity-80 cursor-pointer", isConverted && "cursor-default")}>
+          <button onClick={(e) => { e.stopPropagation(); setShowStatusMenu((v) => !v); }} disabled={isConverted} className={cn("flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border transition-all", statusCfg.className, !isConverted && "hover:opacity-80 cursor-pointer", isConverted && "cursor-default")}>
             <StatusIcon className="w-3 h-3" />
             {statusCfg.label}
             {!isConverted && <ChevronDown className="w-2.5 h-2.5" />}
@@ -128,7 +135,7 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
                 const cfg = STATUS_CONFIG[s];
                 const Ic = cfg.icon;
                 return (
-                  <button key={s} onClick={() => { onStatusChange(idea.id, s); setShowStatusMenu(false); }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-700 transition-colors", idea.status === s ? "text-primary-400" : "text-surface-300")}>
+                  <button key={s} onClick={(e) => { e.stopPropagation(); onStatusChange(idea.id, s); setShowStatusMenu(false); }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-700 transition-colors", idea.status === s ? "text-primary-400" : "text-surface-300")}>
                     <Ic className="w-3.5 h-3.5" />
                     {cfg.label}
                   </button>
@@ -141,18 +148,18 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-surface-600 mr-1">{formatDistanceToNow(new Date(idea.updatedAt), { addSuffix: true })}</span>
           {!isConverted && !isDropped && (
-            <button onClick={() => onConvert(idea)} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-all" title="Convert to task">
+            <button onClick={(e) => { e.stopPropagation(); onConvert(idea); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-all" title="Convert to task">
               <Rocket className="w-3 h-3" /> Convert
             </button>
           )}
           {isConverted && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium"><CheckCircle2 className="w-3 h-3" /> Task created</span>}
-          <button onClick={() => onPin(idea.id, !idea.isPinned)} className={cn("opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-all", idea.isPinned ? "text-amber-400 opacity-100" : "text-surface-500 hover:text-amber-400")} title={idea.isPinned ? "Unpin" : "Pin idea"}><Pin className="w-3.5 h-3.5" /></button>
-          {!isConverted && <button onClick={() => onEdit(idea)} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all" title="Edit idea"><Pencil className="w-3.5 h-3.5" /></button>}
-          {!isConverted && <button onClick={() => onDelete(idea.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all" title="Delete idea"><Trash2 className="w-3.5 h-3.5" /></button>}
+          <button onClick={(e) => { e.stopPropagation(); onPin(idea.id, !idea.isPinned); }} className={cn("opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-all", idea.isPinned ? "text-amber-400 opacity-100" : "text-surface-500 hover:text-amber-400")} title={idea.isPinned ? "Unpin" : "Pin idea"}><Pin className="w-3.5 h-3.5" /></button>
+          {!isConverted && <button onClick={(e) => { e.stopPropagation(); onEdit(idea); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all" title="Edit idea"><Pencil className="w-3.5 h-3.5" /></button>}
+          {!isConverted && <button onClick={(e) => { e.stopPropagation(); onDelete(idea.id); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all" title="Delete idea"><Trash2 className="w-3.5 h-3.5" /></button>}
         </div>
       </div>
 
-      {showStatusMenu && <div className="fixed inset-0 z-10" onClick={() => setShowStatusMenu(false)} />}
+      {showStatusMenu && <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setShowStatusMenu(false); }} />}
     </div>
   );
 }
@@ -327,7 +334,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     setEditBody(idea.body ?? "");
     setEditColor(idea.color);
     setEditTags(idea.tags);
-    setEditPages(idea.pages.length ? idea.pages : [{ id: crypto.randomUUID(), title: "Page 1", content: "", updatedAt: new Date().toISOString() }]);
+    setEditPages(idea.pages.length ? idea.pages : [{ id: makeId(), title: "Page 1", content: "", updatedAt: new Date().toISOString() }]);
     setActivePageId((idea.pages[0]?.id ?? null) || null);
   };
 
@@ -340,7 +347,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   };
 
   const addPage = () => {
-    const next = { id: crypto.randomUUID(), title: `Page ${editPages.length + 1}`, content: "", updatedAt: new Date().toISOString() };
+    const next = { id: makeId(), title: `Page ${editPages.length + 1}`, content: "", updatedAt: new Date().toISOString() };
     setEditPages((prev) => [...prev, next]);
     setActivePageId(next.id);
   };

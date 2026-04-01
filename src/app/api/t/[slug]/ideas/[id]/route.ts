@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -61,18 +62,35 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { title, body, color, status, isPinned, tags, pages } = await req.json();
 
-    const updated = await prisma.idea.update({
-      where: { id },
-      data: {
-        ...(title !== undefined && { title: title.trim() }),
-        ...(body !== undefined && { body: body?.trim() || null }),
-        ...(color !== undefined && { color }),
-        ...(status !== undefined && { status }),
-        ...(isPinned !== undefined && { isPinned }),
-        ...(tags !== undefined && { tags: sanitizeTags(tags) }),
-        ...(pages !== undefined && { pages: sanitizePages(pages) }),
-      },
-    });
+    let updated;
+    try {
+      updated = await prisma.idea.update({
+        where: { id },
+        data: {
+          ...(title !== undefined && { title: title.trim() }),
+          ...(body !== undefined && { body: body?.trim() || null }),
+          ...(color !== undefined && { color }),
+          ...(status !== undefined && { status }),
+          ...(isPinned !== undefined && { isPinned }),
+          ...(tags !== undefined && { tags: sanitizeTags(tags) }),
+          ...(pages !== undefined && { pages: sanitizePages(pages) }),
+        },
+      });
+    } catch (e) {
+      const isMissingColumn = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2022";
+      if (!isMissingColumn) throw e;
+      // Fallback for environments where DB migration has not yet added tags/pages.
+      updated = await prisma.idea.update({
+        where: { id },
+        data: {
+          ...(title !== undefined && { title: title.trim() }),
+          ...(body !== undefined && { body: body?.trim() || null }),
+          ...(color !== undefined && { color }),
+          ...(status !== undefined && { status }),
+          ...(isPinned !== undefined && { isPinned }),
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err) {
