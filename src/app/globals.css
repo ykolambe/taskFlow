@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 /* Light theme (html without .dark) — NOTE: high surf-* index = light backgrounds; low = dark text.
-   Do not use text-surface-900 for body copy in light mode (it is near-white). Prefer text-slate-* or text-surface-50/100. */
+   Do not use text-surface-900 for body copy in light mode (it is near-white). Prefer text-slate-* or text-surface-50/100.
+   Do not use bg-surface-100 for “light” panels — surf-100 is dark; use bg-surface-950/900/800 or bg-white/slate-50. */
 :root {
   color-scheme: light;
   --surf-50: 15 23 42;

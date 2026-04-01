@@ -26,7 +26,7 @@ export async function GET(
     name: `TaskFlow — ${company.name}`,
     short_name: company.name,
     description: `TaskFlow workspace for ${company.name}`,
-    start_url: `/t/${slug}/login`,
+    start_url: `/t/${slug}/dashboard`,
     scope: `/t/${slug}/`,
     display: "standalone",
     background_color: "#101522",
