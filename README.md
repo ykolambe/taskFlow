@@ -107,7 +107,7 @@ TaskFlow exposes a root [Web App Manifest](https://developer.mozilla.org/en-US/d
   npm run pwa:icons
   ```
 - **Checking:** Chrome DevTools → **Application** → **Manifest**. On iOS Safari: **Share** → **Add to Home Screen**.
-- **Service worker:** Not included yet. Cookie-based auth makes aggressive offline caching risky; a future SW should use **network-first** for pages and `/api/*`.
+- **Service worker:** A minimal SW is now included at `/sw.js` and registered from root layout for installability. It uses **network-first** for app/API routes and conservative cache-first for static assets.
 
 ---
 

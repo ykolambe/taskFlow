@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import { Manrope, Playfair_Display } from "next/font/google";
+import PwaServiceWorker from "@/components/PwaServiceWorker";
+import PwaInstallButton from "@/components/PwaInstallButton";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -49,6 +51,8 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${manrope.variable} ${playfair.variable}`}>
         {children}
+        <PwaServiceWorker />
+        <PwaInstallButton />
         <Toaster
           position="top-right"
           toastOptions={{
