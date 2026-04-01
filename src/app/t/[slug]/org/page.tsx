@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import OrgChart from "@/components/tenant/OrgChart";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
-import { getPrimaryManagerId, linksFromDb } from "@/lib/reportingLinks";
+import { getOrgChartParentId, linksFromDb } from "@/lib/reportingLinks";
 
 export default async function OrgChartPage({
   params,
@@ -55,16 +55,9 @@ export default async function OrgChartPage({
 
   const mainHierarchyIdSet = new Set(mainHierarchyUsers.map((u) => u.id));
 
-  /** Parent for tree edges: root if no parent, or parent not in the drawable org tree (bootstrap / super-only / missing flag). */
+  /** Parent for tree edges: first drawable manager in reporting order (skips bootstrap-only rows not in the chart). */
   function effectiveParentId(u: (typeof allUsers)[number]): string | null {
-    const p = getPrimaryManagerId(reportingLinks, u.id);
-    if (!p) return null;
-    const parent = allUsers.find((x) => x.id === p);
-    if (!parent) return null;
-    if (parent.isTenantBootstrapAccount) return null;
-    if (parent.isSuperAdmin && !parent.roleLevelId) return null;
-    if (!mainHierarchyIdSet.has(p)) return null;
-    return p;
+    return getOrgChartParentId(reportingLinks, u.id, mainHierarchyIdSet);
   }
 
   function toOrgNode(u: (typeof allUsers)[number]) {

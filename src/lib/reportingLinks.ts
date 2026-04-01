@@ -24,6 +24,25 @@ export function getPrimaryManagerId(links: ReportingLinkRow[], subordinateId: st
   return mine[0].managerId;
 }
 
+/**
+ * Parent for org chart edges: first reporting line whose manager is in the drawable set (sortOrder order).
+ * Skips bootstrap / hidden accounts that are not in `drawableUserIds`, so a person can report to Tejas
+ * even when a tenant bootstrap user is listed as a secondary manager.
+ */
+export function getOrgChartParentId(
+  links: ReportingLinkRow[],
+  subordinateId: string,
+  drawableUserIds: Set<string>
+): string | null {
+  const mine = links
+    .filter((l) => l.subordinateId === subordinateId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.managerId.localeCompare(b.managerId));
+  for (const l of mine) {
+    if (drawableUserIds.has(l.managerId)) return l.managerId;
+  }
+  return null;
+}
+
 /** Direct reports under this manager on the primary org tree (primary manager of subordinate === managerId). */
 export function getPrimaryDirectSubordinateIds(links: ReportingLinkRow[], managerId: string): string[] {
   const subs = new Set(links.filter((l) => l.managerId === managerId).map((l) => l.subordinateId));
