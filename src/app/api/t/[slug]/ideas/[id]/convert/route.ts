@@ -24,9 +24,6 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!idea || idea.companyId !== user.companyId || idea.userId !== user.userId) {
     return NextResponse.json({ error: "Idea not found" }, { status: 404 });
   }
-  if (idea.status === "CONVERTED") {
-    return NextResponse.json({ error: "Idea already converted" }, { status: 400 });
-  }
 
   try {
     const { title, description, assigneeId, priority = "MEDIUM", dueDate, tags } = await req.json();
@@ -91,10 +88,15 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
-    // Mark idea as converted and store the task reference
+    const existingIds = Array.isArray(idea.convertedTaskIds)
+      ? idea.convertedTaskIds.filter((v): v is string => typeof v === "string" && v.length > 0)
+      : [];
+    const mergedIds = Array.from(new Set([...existingIds, task.id]));
+
+    // Mark idea as converted and store task references
     const updatedIdea = await prisma.idea.update({
       where: { id },
-      data: { status: "CONVERTED", convertedTaskId: task.id },
+      data: { status: "CONVERTED", convertedTaskId: task.id, convertedTaskIds: mergedIds },
     });
 
     return NextResponse.json({ success: true, data: { task, idea: updatedIdea } }, { status: 201 });

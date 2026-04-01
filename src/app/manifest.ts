@@ -16,6 +16,11 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/icon-192.png",
         sizes: "192x192",
         type: "image/png",
+      },
+      {
+        src: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
@@ -29,6 +34,21 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
+      },
+    ],
+    screenshots: [
+      {
+        src: "/pwa-screenshot-wide.png",
+        sizes: "924x530",
+        type: "image/png",
+        form_factor: "wide",
+        label: "TaskFlow desktop workspace view",
+      },
+      {
+        src: "/pwa-screenshot-mobile.png",
+        sizes: "720x1280",
+        type: "image/png",
+        label: "TaskFlow mobile workspace view",
       },
     ],
   };

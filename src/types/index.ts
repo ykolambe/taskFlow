@@ -262,6 +262,7 @@ export interface Idea {
   pages?: IdeaPage[];
   status: IdeaStatus;
   convertedTaskId: string | null;
+  convertedTaskIds?: string[];
   isPinned: boolean;
   createdAt: string;
   updatedAt: string;

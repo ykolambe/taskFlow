@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Lightbulb,
   Plus,
@@ -52,6 +53,14 @@ const STATUS_CONFIG: Record<IdeaStatus, { label: string; icon: React.ElementType
 const PRIORITY_LABELS: Record<Priority, string> = { LOW: "Low", MEDIUM: "Medium", HIGH: "High", URGENT: "Urgent" };
 
 type RichIdea = Idea & { tags: IdeaTag[]; pages: IdeaPage[] };
+type LinkedTask = {
+  id: string;
+  title: string;
+  assignee?: { firstName: string; lastName: string } | null;
+  priority?: string;
+  status?: string;
+  dueDate?: string | null;
+};
 
 interface Props {
   user: TenantTokenPayload;
@@ -97,7 +106,10 @@ function normalizePage(raw: unknown): IdeaPage | null {
 function normalizeIdea(idea: Idea): RichIdea {
   const tags = Array.isArray((idea as { tags?: unknown }).tags) ? (idea as { tags: unknown[] }).tags.map(normalizeTag).filter((v): v is IdeaTag => Boolean(v)) : [];
   const pages = Array.isArray((idea as { pages?: unknown }).pages) ? (idea as { pages: unknown[] }).pages.map(normalizePage).filter((v): v is IdeaPage => Boolean(v)) : [];
-  return { ...idea, tags, pages };
+  const convertedTaskIds = Array.isArray((idea as { convertedTaskIds?: unknown }).convertedTaskIds)
+    ? (idea as { convertedTaskIds: unknown[] }).convertedTaskIds.filter((v): v is string => typeof v === "string")
+    : [];
+  return { ...idea, tags, pages, convertedTaskIds };
 }
 
 function makeId(): string {
@@ -121,6 +133,7 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
   const statusCfg = STATUS_CONFIG[idea.status];
   const StatusIcon = statusCfg.icon;
   const isConverted = idea.status === "CONVERTED";
+  const convertedCount = (idea.convertedTaskIds?.length ?? 0) + (idea.convertedTaskId ? 1 : 0);
   const isDropped = idea.status === "DROPPED";
 
   return (
@@ -175,15 +188,15 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
 
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-surface-600 mr-1">{formatDistanceToNow(new Date(idea.updatedAt), { addSuffix: true })}</span>
-          {!isConverted && !isDropped && (
+          {!isDropped && (
             <button onClick={(e) => { e.stopPropagation(); onConvert(idea); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-all" title="Convert to task">
-              <Rocket className="w-3 h-3" /> Convert
+              <Rocket className="w-3 h-3" /> {isConverted ? "Convert again" : "Convert"}
             </button>
           )}
-          {isConverted && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium"><CheckCircle2 className="w-3 h-3" /> Task created</span>}
+          {isConverted && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium"><CheckCircle2 className="w-3 h-3" /> {convertedCount > 1 ? `${convertedCount} tasks created` : "Task created"}</span>}
           <button onClick={(e) => { e.stopPropagation(); onPin(idea.id, !idea.isPinned); }} className={cn("opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-all", idea.isPinned ? "text-amber-400 opacity-100" : "text-surface-500 hover:text-amber-400")} title={idea.isPinned ? "Unpin" : "Pin idea"}><Pin className="w-3.5 h-3.5" /></button>
-          {!isConverted && <button onClick={(e) => { e.stopPropagation(); onEdit(idea); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all" title="Edit idea"><Pencil className="w-3.5 h-3.5" /></button>}
-          {!isConverted && <button onClick={(e) => { e.stopPropagation(); onDelete(idea.id); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all" title="Delete idea"><Trash2 className="w-3.5 h-3.5" /></button>}
+          <button onClick={(e) => { e.stopPropagation(); onEdit(idea); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all" title="Edit idea"><Pencil className="w-3.5 h-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(idea.id); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all" title="Delete idea"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
 
@@ -300,6 +313,8 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   const [convertDescription, setConvertDescription] = useState("");
   const [converting, setConverting] = useState(false);
   const [creatorCollapsed, setCreatorCollapsed] = useState(false);
+  const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
+  const [loadingLinkedTasks, setLoadingLinkedTasks] = useState(false);
 
   const knownTags = useMemo(() => {
     const map = new Map<string, IdeaTag>();
@@ -376,6 +391,15 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     setEditTags(idea.tags);
     setEditPages(idea.pages.length ? idea.pages : [{ id: makeId(), title: "Page 1", content: "", sections: [], updatedAt: new Date().toISOString() }]);
     setActivePageId((idea.pages[0]?.id ?? null) || null);
+    setLinkedTasks([]);
+    setLoadingLinkedTasks(true);
+    void fetch(`/api/t/${slug}/ideas/${idea.id}/tasks`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.success && Array.isArray(j.data)) setLinkedTasks(j.data as LinkedTask[]);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingLinkedTasks(false));
   };
 
   const addEditTag = () => {
@@ -677,6 +701,33 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-surface-300">Linked Tasks Created From This Idea</p>
+              {loadingLinkedTasks ? (
+                <div className="text-xs text-surface-500 p-3 border border-dashed border-surface-700 rounded-xl">Loading linked tasks...</div>
+              ) : linkedTasks.length === 0 ? (
+                <div className="text-xs text-surface-500 p-3 border border-dashed border-surface-700 rounded-xl">No tasks created from this idea yet.</div>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {linkedTasks.map((t) => (
+                    <Link
+                      key={t.id}
+                      href={`/t/${slug}/tasks?task=${t.id}`}
+                      className="flex items-center justify-between rounded-xl border border-surface-700 px-3 py-2 hover:bg-surface-800 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm text-surface-100 truncate">{t.title}</p>
+                        <p className="text-[11px] text-surface-500">
+                          {t.assignee ? `${t.assignee.firstName} ${t.assignee.lastName}` : "Unassigned"} · {t.status ?? "TODO"}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-primary-400 font-semibold">View</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
