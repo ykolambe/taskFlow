@@ -1,7 +1,7 @@
 /* global self, caches, fetch */
 
 const STATIC_CACHE = "taskflow-static-v1";
-const RUNTIME_CACHE = "taskflow-runtime-v3";
+const RUNTIME_CACHE = "taskflow-runtime-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -30,13 +30,11 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-async function networkFirst(request, opts) {
-  const cacheWrites = opts?.cacheWrites !== false;
+async function networkFirst(request) {
   const cache = await caches.open(RUNTIME_CACHE);
   try {
-    // credentials: "include" helps some PWA/WebView stacks send session cookies on SW-mediated fetches
     const response = await fetch(request, { credentials: "include" });
-    if (cacheWrites && request.method === "GET" && response && response.ok) {
+    if (request.method === "GET" && response && response.ok) {
       cache.put(request, response.clone());
     }
     return response;
@@ -47,6 +45,11 @@ async function networkFirst(request, opts) {
   }
 }
 
+/** Never cache app/API — RSC + JSON must always be fresh or PWA shows stale login/session. */
+function networkOnly(request) {
+  return fetch(request, { credentials: "include" });
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -54,24 +57,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Top-level document loads to tenant/platform: never cache (avoids stale login UI in PWA).
+  // Tenant, platform, API: always network, never write to runtime cache (fixes re-login after PWA close).
   if (
-    request.mode === "navigate" &&
-    (url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/"))
+    url.pathname.startsWith("/t/") ||
+    url.pathname.startsWith("/platform/") ||
+    url.pathname.startsWith("/api/")
   ) {
-    event.respondWith(fetch(request, { credentials: "include" }));
-    return;
-  }
-
-  // Never cache API GETs — avoids stale JSON/auth-related responses in PWA.
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(request, { cacheWrites: false }));
-    return;
-  }
-
-  // App HTML/RSC: network-first with cache (non-navigate GETs only).
-  if (url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/")) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkOnly(request));
     return;
   }
 

@@ -89,11 +89,14 @@ export async function POST(req: NextRequest) {
       aiAddonAccess: Boolean(user.aiAddonAccess),
     });
 
-    const res = NextResponse.json({
-      success: true,
-      slug,
-      redirectTo: `/t/${slug}/dashboard`,
-    });
+    const res = NextResponse.json(
+      {
+        success: true,
+        slug,
+        redirectTo: `/t/${slug}/dashboard`,
+      },
+      { headers: { "Cache-Control": "no-store, private" } }
+    );
     res.cookies.set(`tenant_${slug}_token`, token, authSessionCookieOptions(req));
     return res;
   } catch (e) {

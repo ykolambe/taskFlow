@@ -49,7 +49,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       aiAddonAccess: user.aiAddonAccess,
     });
 
-    const res = NextResponse.json({ success: true, firstName: user.firstName, lastName: user.lastName });
+    const res = NextResponse.json(
+      { success: true, firstName: user.firstName, lastName: user.lastName },
+      { headers: { "Cache-Control": "no-store, private" } }
+    );
     res.cookies.set(`tenant_${slug}_token`, token, authSessionCookieOptions(req));
 
     return res;

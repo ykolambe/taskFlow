@@ -107,7 +107,7 @@ TaskFlow exposes a root [Web App Manifest](https://developer.mozilla.org/en-US/d
   npm run pwa:icons
   ```
 - **Checking:** Chrome DevTools → **Application** → **Manifest**. On iOS Safari: **Share** → **Add to Home Screen**.
-- **Service worker:** A minimal SW is now included at `/sw.js` and registered from root layout for installability. It uses **network-first** for app/API routes and conservative cache-first for static assets. **Document navigations** to `/t/*` and `/platform/*` are **never cached** so the server always sees cookies (avoids a stale login shell after closing the PWA).
+- **Service worker:** `/sw.js` never caches `/t/*`, `/platform/*`, or `/api/*` (only static assets use the cache). That avoids **stale RSC/HTML** after login and fixes “logged out every time I reopen the PWA” when the SW had cached pre-auth responses.
 - **Staying logged in:** Sessions use httpOnly cookies (`JWT` + `maxAge` aligned). The `Secure` cookie flag follows the **actual request** (URL + `X-Forwarded-Proto`), not `NODE_ENV`, so plain **HTTP** installs (e.g. `http://IP:3000`) still persist cookies. Use **HTTPS** in production when possible; behind a reverse proxy, set `X-Forwarded-Proto: https` so cookies stay `Secure`. Override with `COOKIE_SECURE=true|false` if needed. Optional: `SESSION_MAX_AGE_DAYS` (default 7, max 365) in `.env`.
 
 ---
