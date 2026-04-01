@@ -417,6 +417,10 @@ model Idea {
   title       String
   body        String?
   color       String      @default("#6366f1")
+  /// JSON array: { name: string, color: string }[]
+  tags        Json        @default("[]")
+  /// JSON array: { id: string, title: string, content: string, updatedAt: string }[]
+  pages       Json        @default("[]")
   status      IdeaStatus  @default(IDEA)
   convertedTaskId String?
   isPinned    Boolean     @default(false)

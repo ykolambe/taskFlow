@@ -66,11 +66,12 @@ export async function isModuleEnabledForUser(
   });
   if (!user) return false;
 
-  const hasModule = company.modules.includes(moduleKey);
-  const hasCompanyAddon =
+  const billingAddon =
     moduleKey === "chat" ? Boolean(company.billing?.chatAddonEnabled) : Boolean(company.billing?.recurringAddonEnabled);
+  const moduleListed = company.modules.includes(moduleKey);
+  const companyAllowsFeature = moduleListed || billingAddon;
   const hasUserGrant = moduleKey === "chat" ? user.chatAddonAccess : user.recurringAddonAccess;
-  if (!hasModule || !hasCompanyAddon || !hasUserGrant) return false;
-  if (!company.billing || !isPaidSubscriptionAccessOk(company.billing)) return false;
+  if (!companyAllowsFeature || !hasUserGrant) return false;
+  if (company.billing && !isPaidSubscriptionAccessOk(company.billing)) return false;
   return true;
 }

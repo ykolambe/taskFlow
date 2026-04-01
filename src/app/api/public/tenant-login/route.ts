@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { PrismaClientInitializationError } from "@prisma/client/runtime/library";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { authSessionCookieOptions } from "@/lib/authCookies";
 import bcrypt from "bcryptjs";
 import { takePublicRateLimit, clientKeyFromRequest } from "@/lib/publicRateLimit";
+
+async function passwordMatches(plain: string, hash: string): Promise<boolean> {
+  if (!hash || typeof hash !== "string") return false;
+  try {
+    return await bcrypt.compare(plain, hash);
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: NextRequest) {
   const key = `tenant-login:${clientKeyFromRequest(req)}`;
@@ -12,7 +23,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
+    let body: Record<string, unknown>;
+    try {
+      const raw = await req.json();
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      }
+      body = raw as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const email = typeof body.email === "string" ? body.email.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
 
@@ -31,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const matches = [];
     for (const u of candidates) {
-      if (await bcrypt.compare(password, u.passwordHash)) {
+      if (await passwordMatches(password, u.passwordHash)) {
         matches.push(u);
       }
     }
@@ -60,13 +80,13 @@ export async function POST(req: NextRequest) {
       companySlug: slug,
       roleLevelId: user.roleLevelId ?? null,
       level: user.roleLevel?.level ?? 0,
-      isSuperAdmin: user.isSuperAdmin,
+      isSuperAdmin: Boolean(user.isSuperAdmin),
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
-      chatAddonAccess: user.chatAddonAccess,
-      recurringAddonAccess: user.recurringAddonAccess,
-      aiAddonAccess: user.aiAddonAccess,
+      chatAddonAccess: Boolean(user.chatAddonAccess),
+      recurringAddonAccess: Boolean(user.recurringAddonAccess),
+      aiAddonAccess: Boolean(user.aiAddonAccess),
     });
 
     const res = NextResponse.json({
@@ -77,7 +97,18 @@ export async function POST(req: NextRequest) {
     res.cookies.set(`tenant_${slug}_token`, token, authSessionCookieOptions(req));
     return res;
   } catch (e) {
-    console.error(e);
+    if (e instanceof PrismaClientInitializationError) {
+      console.error("tenant-login: database unavailable:", e.message);
+      return NextResponse.json(
+        { error: "Service temporarily unavailable. Check DATABASE_URL and that PostgreSQL is running." },
+        { status: 503 }
+      );
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("tenant-login: Prisma error", e.code, e.message);
+    } else {
+      console.error("tenant-login:", e);
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

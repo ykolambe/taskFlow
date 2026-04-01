@@ -12,7 +12,7 @@ const USER_SELECT = {
 /**
  * POST /api/t/[slug]/ideas/[id]/convert
  * Converts an idea into a task ticket.
- * Body: { assigneeId, priority, dueDate }
+ * Body: { title?, description?, assigneeId, priority, dueDate, tags? }
  * Returns the created task + marks the idea as CONVERTED.
  */
 export async function POST(req: NextRequest, { params }: Params) {
@@ -29,15 +29,30 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   try {
-    const { assigneeId, priority = "MEDIUM", dueDate } = await req.json();
+    const { title, description, assigneeId, priority = "MEDIUM", dueDate, tags } = await req.json();
+    const taskTitle = typeof title === "string" && title.trim() ? title.trim() : idea.title;
+    const taskDescription =
+      typeof description === "string"
+        ? description.trim() || null
+        : idea.body || null;
+    const cleanedTagNames = Array.isArray(tags)
+      ? tags
+          .map((t) => (typeof t === "string" ? t.trim() : ""))
+          .filter(Boolean)
+          .slice(0, 20)
+      : [];
+    const withTagPrefix =
+      cleanedTagNames.length > 0
+        ? `Tags: ${cleanedTagNames.join(", ")}${taskDescription ? `\n\n${taskDescription}` : ""}`
+        : taskDescription;
 
     const task = await prisma.task.create({
       data: {
         companyId: user.companyId,
         creatorId: user.userId,
         assigneeId: assigneeId || user.userId,
-        title: idea.title,
-        description: idea.body || null,
+        title: taskTitle,
+        description: withTagPrefix,
         priority,
         ...(dueDate && { dueDate: new Date(dueDate) }),
       },

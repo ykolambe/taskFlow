@@ -1,27 +1,32 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState } from "react";
 import {
-  Lightbulb, Plus, Pin, Trash2, Pencil, Check, X, Rocket,
-  Brain, CheckCircle2, XCircle, ChevronDown, ArrowRight, Zap,
+  Lightbulb,
+  Plus,
+  Pin,
+  Trash2,
+  Pencil,
+  Check,
+  Rocket,
+  Brain,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
   Search,
+  Tag,
+  FileText,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { TenantTokenPayload } from "@/lib/auth";
-import { Idea, IdeaStatus, User as UserType, Priority } from "@/types";
+import { Idea, IdeaStatus, IdeaTag, IdeaPage, User as UserType, Priority } from "@/types";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const IDEA_COLORS = [
-  "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
-  "#f97316", "#eab308", "#22c55e", "#14b8a6",
-  "#06b6d4", "#3b82f6",
-];
+const IDEA_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6"];
 
 const STATUS_CONFIG: Record<IdeaStatus, { label: string; icon: React.ElementType; className: string }> = {
   IDEA: { label: "Idea", icon: Lightbulb, className: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
@@ -30,12 +35,9 @@ const STATUS_CONFIG: Record<IdeaStatus, { label: string; icon: React.ElementType
   DROPPED: { label: "Dropped", icon: XCircle, className: "bg-surface-600/50 text-surface-500 border-surface-600/30" },
 };
 
-const PRIORITY_LABELS: Record<Priority, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  URGENT: "Urgent",
-};
+const PRIORITY_LABELS: Record<Priority, string> = { LOW: "Low", MEDIUM: "Medium", HIGH: "High", URGENT: "Urgent" };
+
+type RichIdea = Idea & { tags: IdeaTag[]; pages: IdeaPage[] };
 
 interface Props {
   user: TenantTokenPayload;
@@ -44,23 +46,42 @@ interface Props {
   assignableUsers: UserType[];
 }
 
-// ── IdeaCard ─────────────────────────────────────────────────────────────────
+function normalizeTag(raw: unknown): IdeaTag | null {
+  if (!raw || typeof raw !== "object") return null;
+  const t = raw as Record<string, unknown>;
+  const name = typeof t.name === "string" ? t.name.trim() : "";
+  const color = typeof t.color === "string" ? t.color.trim() : "";
+  if (!name || !color) return null;
+  return { name, color };
+}
 
-function IdeaCard({
-  idea,
-  onEdit,
-  onDelete,
-  onPin,
-  onStatusChange,
-  onConvert,
-}: {
-  idea: Idea;
-  onEdit: (idea: Idea) => void;
-  onDelete: (id: string) => void;
-  onPin: (id: string, pinned: boolean) => void;
-  onStatusChange: (id: string, status: IdeaStatus) => void;
-  onConvert: (idea: Idea) => void;
-}) {
+function normalizePage(raw: unknown): IdeaPage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as Record<string, unknown>;
+  const id = typeof p.id === "string" ? p.id : "";
+  const title = typeof p.title === "string" ? p.title : "";
+  const content = typeof p.content === "string" ? p.content : "";
+  const updatedAt = typeof p.updatedAt === "string" ? p.updatedAt : new Date().toISOString();
+  if (!id || !title) return null;
+  return { id, title, content, updatedAt };
+}
+
+function normalizeIdea(idea: Idea): RichIdea {
+  const tags = Array.isArray((idea as { tags?: unknown }).tags) ? (idea as { tags: unknown[] }).tags.map(normalizeTag).filter((v): v is IdeaTag => Boolean(v)) : [];
+  const pages = Array.isArray((idea as { pages?: unknown }).pages) ? (idea as { pages: unknown[] }).pages.map(normalizePage).filter((v): v is IdeaPage => Boolean(v)) : [];
+  return { ...idea, tags, pages };
+}
+
+function TagChip({ tag }: { tag: IdeaTag }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px]" style={{ borderColor: `${tag.color}80`, color: tag.color, backgroundColor: `${tag.color}20` }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+      {tag.name}
+    </span>
+  );
+}
+
+function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: { idea: RichIdea; onEdit: (idea: RichIdea) => void; onDelete: (id: string) => void; onPin: (id: string, pinned: boolean) => void; onStatusChange: (id: string, status: IdeaStatus) => void; onConvert: (idea: RichIdea) => void; }) {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const statusCfg = STATUS_CONFIG[idea.status];
   const StatusIcon = statusCfg.icon;
@@ -68,76 +89,46 @@ function IdeaCard({
   const isDropped = idea.status === "DROPPED";
 
   return (
-    <div
-      className={cn(
-        "group relative bg-surface-800 border rounded-2xl p-4 transition-all duration-200",
-        "hover:border-surface-600 hover:shadow-lg hover:shadow-black/20",
-        isDropped ? "opacity-50" : ""
-      )}
-      style={{ borderColor: idea.color + "40" }}
-    >
-      {/* Color accent bar */}
-      <div
-        className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
-        style={{ backgroundColor: idea.color }}
-      />
-
-      {/* Header row */}
+    <div className={cn("group relative bg-surface-800 border rounded-2xl p-4 transition-all duration-200", "hover:border-surface-600 hover:shadow-lg hover:shadow-black/20", isDropped ? "opacity-50" : "")} style={{ borderColor: idea.color + "40" }}>
+      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ backgroundColor: idea.color }} />
       <div className="flex items-start gap-2 mb-2.5">
-        <div
-          className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
-          style={{ backgroundColor: idea.color }}
-        />
-        <p className={cn(
-          "flex-1 text-sm font-semibold leading-snug",
-          isDropped ? "line-through text-surface-500" : "text-surface-100"
-        )}>
-          {idea.title}
-        </p>
-        {idea.isPinned && (
-          <Pin className="w-3 h-3 text-amber-400 flex-shrink-0" />
-        )}
+        <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: idea.color }} />
+        <p className={cn("flex-1 text-sm font-semibold leading-snug", isDropped ? "line-through text-surface-500" : "text-surface-100")}>{idea.title}</p>
+        {idea.isPinned && <Pin className="w-3 h-3 text-amber-400 flex-shrink-0" />}
       </div>
 
-      {idea.body && (
-        <p className="text-xs text-surface-400 leading-relaxed mb-3 line-clamp-3">
-          {idea.body}
-        </p>
+      {idea.body && <p className="text-xs text-surface-400 leading-relaxed mb-2 line-clamp-3">{idea.body}</p>}
+
+      {(idea.tags.length > 0 || idea.pages.length > 0) && (
+        <div className="mb-3 space-y-1.5">
+          {idea.tags.length > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {idea.tags.slice(0, 4).map((t) => <TagChip key={`${idea.id}-${t.name}-${t.color}`} tag={t} />)}
+              {idea.tags.length > 4 && <span className="text-[10px] text-surface-500">+{idea.tags.length - 4}</span>}
+            </div>
+          )}
+          {idea.pages.length > 0 && (
+            <div className="inline-flex items-center gap-1 text-[10px] text-surface-500">
+              <FileText className="w-3 h-3" /> {idea.pages.length} page{idea.pages.length > 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Footer */}
       <div className="flex items-center justify-between mt-auto">
-        {/* Status badge */}
         <div className="relative">
-          <button
-            onClick={() => setShowStatusMenu((v) => !v)}
-            disabled={isConverted}
-            className={cn(
-              "flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border transition-all",
-              statusCfg.className,
-              !isConverted && "hover:opacity-80 cursor-pointer",
-              isConverted && "cursor-default"
-            )}
-          >
+          <button onClick={() => setShowStatusMenu((v) => !v)} disabled={isConverted} className={cn("flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border transition-all", statusCfg.className, !isConverted && "hover:opacity-80 cursor-pointer", isConverted && "cursor-default")}>
             <StatusIcon className="w-3 h-3" />
             {statusCfg.label}
             {!isConverted && <ChevronDown className="w-2.5 h-2.5" />}
           </button>
-
           {showStatusMenu && (
             <div className="absolute left-0 bottom-full mb-1 z-20 bg-surface-800 border border-surface-700 rounded-xl shadow-xl overflow-hidden min-w-32">
               {(["IDEA", "THINKING", "DROPPED"] as IdeaStatus[]).map((s) => {
                 const cfg = STATUS_CONFIG[s];
                 const Ic = cfg.icon;
                 return (
-                  <button
-                    key={s}
-                    onClick={() => { onStatusChange(idea.id, s); setShowStatusMenu(false); }}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-700 transition-colors",
-                      idea.status === s ? "text-primary-400" : "text-surface-300"
-                    )}
-                  >
+                  <button key={s} onClick={() => { onStatusChange(idea.id, s); setShowStatusMenu(false); }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-700 transition-colors", idea.status === s ? "text-primary-400" : "text-surface-300")}>
                     <Ic className="w-3.5 h-3.5" />
                     {cfg.label}
                   </button>
@@ -148,151 +139,139 @@ function IdeaCard({
         </div>
 
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-surface-600 mr-1">
-            {formatDistanceToNow(new Date(idea.updatedAt), { addSuffix: true })}
-          </span>
-
-          {/* Convert button — only show when not yet converted/dropped */}
+          <span className="text-[10px] text-surface-600 mr-1">{formatDistanceToNow(new Date(idea.updatedAt), { addSuffix: true })}</span>
           {!isConverted && !isDropped && (
-            <button
-              onClick={() => onConvert(idea)}
-              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-all"
-              title="Convert to task"
-            >
+            <button onClick={() => onConvert(idea)} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-all" title="Convert to task">
               <Rocket className="w-3 h-3" /> Convert
             </button>
           )}
-
-          {isConverted && (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
-              <CheckCircle2 className="w-3 h-3" /> Task created
-            </span>
-          )}
-
-          {/* Action icons */}
-          <button
-            onClick={() => onPin(idea.id, !idea.isPinned)}
-            className={cn(
-              "opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-all",
-              idea.isPinned
-                ? "text-amber-400 opacity-100"
-                : "text-surface-500 hover:text-amber-400"
-            )}
-            title={idea.isPinned ? "Unpin" : "Pin idea"}
-          >
-            <Pin className="w-3.5 h-3.5" />
-          </button>
-
-          {!isConverted && (
-            <button
-              onClick={() => onEdit(idea)}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all"
-              title="Edit idea"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {!isConverted && (
-            <button
-              onClick={() => onDelete(idea.id)}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all"
-              title="Delete idea"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          {isConverted && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium"><CheckCircle2 className="w-3 h-3" /> Task created</span>}
+          <button onClick={() => onPin(idea.id, !idea.isPinned)} className={cn("opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-all", idea.isPinned ? "text-amber-400 opacity-100" : "text-surface-500 hover:text-amber-400")} title={idea.isPinned ? "Unpin" : "Pin idea"}><Pin className="w-3.5 h-3.5" /></button>
+          {!isConverted && <button onClick={() => onEdit(idea)} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-primary-400 transition-all" title="Edit idea"><Pencil className="w-3.5 h-3.5" /></button>}
+          {!isConverted && <button onClick={() => onDelete(idea.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-surface-500 hover:text-red-400 transition-all" title="Delete idea"><Trash2 className="w-3.5 h-3.5" /></button>}
         </div>
       </div>
 
-      {/* Dismiss status menu on outside click */}
-      {showStatusMenu && (
-        <div className="fixed inset-0 z-10" onClick={() => setShowStatusMenu(false)} />
-      )}
+      {showStatusMenu && <div className="fixed inset-0 z-10" onClick={() => setShowStatusMenu(false)} />}
     </div>
   );
 }
 
-// ── Quick Add Bar ─────────────────────────────────────────────────────────────
-
-function QuickAdd({ onAdd }: { onAdd: (title: string, color: string) => void }) {
-  const [value, setValue] = useState("");
+function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body: string; color: string; tags: IdeaTag[] }) => void; knownTags: IdeaTag[]; }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [color, setColor] = useState(IDEA_COLORS[0]);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [tags, setTags] = useState<IdeaTag[]>([]);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#22c55e");
 
   const submit = () => {
-    if (!value.trim()) return;
-    onAdd(value.trim(), color);
-    setValue("");
+    if (!title.trim()) return;
+    onAdd({ title: title.trim(), body: body.trim(), color, tags });
+    setTitle("");
+    setBody("");
+    setTags([]);
+  };
+
+  const addTag = () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    if (tags.some((t) => t.name.toLowerCase() == name.toLowerCase())) return;
+    setTags((prev) => [...prev, { name, color: newTagColor }]);
+    setNewTagName("");
   };
 
   return (
-    <div className="flex items-center gap-2 p-4 bg-surface-800 border border-surface-700 rounded-2xl">
-      <Zap className="w-4 h-4 text-primary-400 flex-shrink-0" />
-      <input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-        placeholder="Dump an idea… press Enter to add"
-        className="flex-1 bg-transparent text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none min-w-0"
-        autoFocus
-      />
+    <div className="p-4 bg-surface-800 border border-surface-700 rounded-2xl space-y-3">
+      <div className="flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-primary-400 flex-shrink-0" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="Dump idea headline..." className="flex-1 bg-transparent text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none min-w-0" />
+      </div>
+      <Textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Optional details, context, links..." />
 
-      {/* Color picker */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {IDEA_COLORS.slice(0, 5).map((c) => (
-          <button
-            key={c}
-            onClick={() => setColor(c)}
-            className={cn(
-              "w-4 h-4 rounded-full transition-transform",
-              color === c ? "scale-125 ring-2 ring-white/30" : "hover:scale-110"
-            )}
-            style={{ backgroundColor: c }}
-          />
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-surface-500">Color:</span>
+        {IDEA_COLORS.map((c) => (
+          <button key={c} onClick={() => setColor(c)} className={cn("w-4 h-4 rounded-full transition-transform", color === c ? "scale-125 ring-2 ring-white/30" : "hover:scale-110")} style={{ backgroundColor: c }} />
         ))}
       </div>
 
-      <button
-        onClick={submit}
-        disabled={!value.trim()}
-        className="flex-shrink-0 bg-primary-500 hover:bg-primary-400 disabled:opacity-30 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1"
-      >
-        <Plus className="w-3.5 h-3.5" /> Add
-      </button>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Tag (e.g. Marketing)" />
+          <input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="w-10 h-10 rounded border border-surface-600 bg-surface-800" />
+          <Button size="sm" variant="secondary" onClick={addTag}><Plus className="w-3 h-3" /></Button>
+        </div>
+        {knownTags.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-[10px] text-surface-500 mr-1">Quick tags:</span>
+            {knownTags.slice(0, 8).map((t) => (
+              <button key={`${t.name}-${t.color}`} onClick={() => !tags.some((x) => x.name.toLowerCase() === t.name.toLowerCase()) && setTags((prev) => [...prev, t])}>
+                <TagChip tag={t} />
+              </button>
+            ))}
+          </div>
+        )}
+        {tags.length > 0 && (
+          <div className="flex gap-1 flex-wrap">
+            {tags.map((t) => (
+              <button key={`${t.name}-${t.color}`} onClick={() => setTags((prev) => prev.filter((x) => x.name !== t.name))}><TagChip tag={t} /></button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={submit} disabled={!title.trim()} className="flex-shrink-0 bg-primary-500 hover:bg-primary-400 disabled:opacity-30 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Idea</button>
+      </div>
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-
 export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }: Props) {
-  const [ideas, setIdeas] = useState<Idea[]>(initialIdeas);
+  const [ideas, setIdeas] = useState<RichIdea[]>(initialIdeas.map(normalizeIdea));
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<IdeaStatus | "ALL">("ALL");
+  const [filterTag, setFilterTag] = useState("ALL");
+  const [filterColor, setFilterColor] = useState("ALL");
 
-  // Edit modal
-  const [editIdea, setEditIdea] = useState<Idea | null>(null);
+  const [editIdea, setEditIdea] = useState<RichIdea | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editColor, setEditColor] = useState(IDEA_COLORS[0]);
+  const [editTags, setEditTags] = useState<IdeaTag[]>([]);
+  const [editPages, setEditPages] = useState<IdeaPage[]>([]);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#22c55e");
   const [saving, setSaving] = useState(false);
 
-  // Convert modal
-  const [convertIdea, setConvertIdea] = useState<Idea | null>(null);
+  const [convertIdea, setConvertIdea] = useState<RichIdea | null>(null);
   const [convertAssignee, setConvertAssignee] = useState(user.userId);
   const [convertPriority, setConvertPriority] = useState<Priority>("MEDIUM");
   const [convertDueDate, setConvertDueDate] = useState("");
+  const [convertTitle, setConvertTitle] = useState("");
+  const [convertDescription, setConvertDescription] = useState("");
   const [converting, setConverting] = useState(false);
 
-  // ── Computed ──
+  const knownTags = useMemo(() => {
+    const map = new Map<string, IdeaTag>();
+    ideas.forEach((idea) => idea.tags.forEach((t) => {
+      const key = t.name.toLowerCase();
+      if (!map.has(key)) map.set(key, t);
+    }));
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [ideas]);
 
   const filtered = ideas.filter((idea) => {
     if (filterStatus !== "ALL" && idea.status !== filterStatus) return false;
+    if (filterColor !== "ALL" && idea.color.toLowerCase() !== filterColor.toLowerCase()) return false;
+    if (filterTag !== "ALL" && !idea.tags.some((t) => t.name.toLowerCase() === filterTag.toLowerCase())) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!idea.title.toLowerCase().includes(q) && !(idea.body?.toLowerCase().includes(q))) return false;
+      const pageHit = idea.pages.some((p) => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q));
+      const tagHit = idea.tags.some((t) => t.name.toLowerCase().includes(q));
+      if (!idea.title.toLowerCase().includes(q) && !(idea.body?.toLowerCase().includes(q)) && !tagHit && !pageHit) return false;
     }
     return true;
   });
@@ -308,17 +287,15 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     DROPPED: ideas.filter((i) => i.status === "DROPPED").length,
   };
 
-  // ── Handlers ──
-
-  const handleQuickAdd = async (title: string, color: string) => {
+  const handleQuickAdd = async (payload: { title: string; body: string; color: string; tags: IdeaTag[] }) => {
     const res = await fetch(`/api/t/${slug}/ideas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, color }),
+      body: JSON.stringify({ title: payload.title, body: payload.body || null, color: payload.color, tags: payload.tags, pages: [] }),
     });
     const data = await res.json();
     if (!res.ok) { toast.error(data.error || "Failed"); return; }
-    setIdeas([data.data, ...ideas]);
+    setIdeas((prev) => [normalizeIdea(data.data), ...prev]);
     toast.success("Idea added!");
   };
 
@@ -328,7 +305,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     if (!res.ok) {
       toast.error("Failed to delete");
       const reloaded = await fetch(`/api/t/${slug}/ideas`).then((r) => r.json());
-      if (reloaded.success) setIdeas(reloaded.data);
+      if (reloaded.success) setIdeas(reloaded.data.map(normalizeIdea));
     } else {
       toast.success("Idea deleted");
     }
@@ -336,27 +313,46 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
 
   const handlePin = async (id: string, pinned: boolean) => {
     setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, isPinned: pinned } : i)));
-    await fetch(`/api/t/${slug}/ideas/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isPinned: pinned }),
-    });
+    await fetch(`/api/t/${slug}/ideas/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isPinned: pinned }) });
   };
 
   const handleStatusChange = async (id: string, status: IdeaStatus) => {
     setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
-    await fetch(`/api/t/${slug}/ideas/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    await fetch(`/api/t/${slug}/ideas/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
   };
 
-  const openEdit = (idea: Idea) => {
+  const openEdit = (idea: RichIdea) => {
     setEditIdea(idea);
     setEditTitle(idea.title);
     setEditBody(idea.body ?? "");
     setEditColor(idea.color);
+    setEditTags(idea.tags);
+    setEditPages(idea.pages.length ? idea.pages : [{ id: crypto.randomUUID(), title: "Page 1", content: "", updatedAt: new Date().toISOString() }]);
+    setActivePageId((idea.pages[0]?.id ?? null) || null);
+  };
+
+  const addEditTag = () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    if (editTags.some((t) => t.name.toLowerCase() === name.toLowerCase())) return;
+    setEditTags((prev) => [...prev, { name, color: newTagColor }]);
+    setNewTagName("");
+  };
+
+  const addPage = () => {
+    const next = { id: crypto.randomUUID(), title: `Page ${editPages.length + 1}`, content: "", updatedAt: new Date().toISOString() };
+    setEditPages((prev) => [...prev, next]);
+    setActivePageId(next.id);
+  };
+
+  const updatePage = (id: string, patch: Partial<IdeaPage>) => {
+    setEditPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p)));
+  };
+
+  const deletePage = (id: string) => {
+    const next = editPages.filter((p) => p.id !== id);
+    setEditPages(next);
+    if (activePageId === id) setActivePageId(next[0]?.id ?? null);
   };
 
   const handleSaveEdit = async () => {
@@ -366,11 +362,12 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
       const res = await fetch(`/api/t/${slug}/ideas/${editIdea.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: editTitle, body: editBody, color: editColor }),
+        body: JSON.stringify({ title: editTitle, body: editBody, color: editColor, tags: editTags, pages: editPages }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Failed"); return; }
-      setIdeas((prev) => prev.map((i) => (i.id === editIdea.id ? data.data : i)));
+      const normalized = normalizeIdea(data.data);
+      setIdeas((prev) => prev.map((i) => (i.id === editIdea.id ? normalized : i)));
       setEditIdea(null);
       toast.success("Idea updated!");
     } finally {
@@ -378,25 +375,35 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     }
   };
 
-  const openConvert = (idea: Idea) => {
+  const openConvert = (idea: RichIdea) => {
     setConvertIdea(idea);
     setConvertAssignee(user.userId);
     setConvertPriority("MEDIUM");
     setConvertDueDate("");
+    setConvertTitle(idea.title);
+    const pagesText = idea.pages.map((p) => `## ${p.title}\n${p.content}`).join("\n\n");
+    setConvertDescription([idea.body ?? "", pagesText].filter(Boolean).join("\n\n"));
   };
 
   const handleConvert = async () => {
-    if (!convertIdea) return;
+    if (!convertIdea || !convertTitle.trim()) return;
     setConverting(true);
     try {
       const res = await fetch(`/api/t/${slug}/ideas/${convertIdea.id}/convert`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigneeId: convertAssignee, priority: convertPriority, dueDate: convertDueDate || null }),
+        body: JSON.stringify({
+          title: convertTitle,
+          description: convertDescription,
+          assigneeId: convertAssignee,
+          priority: convertPriority,
+          dueDate: convertDueDate || null,
+          tags: convertIdea.tags.map((t) => t.name),
+        }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Failed"); return; }
-      setIdeas((prev) => prev.map((i) => (i.id === convertIdea.id ? data.data.idea : i)));
+      setIdeas((prev) => prev.map((i) => (i.id === convertIdea.id ? normalizeIdea(data.data.idea) : i)));
       setConvertIdea(null);
       toast.success("Idea converted to task!");
     } finally {
@@ -404,114 +411,63 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     }
   };
 
-  // ── Render ──
+  const activePage = editPages.find((p) => p.id === activePageId) ?? null;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="px-4 sm:px-6 py-4 border-b border-surface-800 bg-surface-900 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-amber-400" />
-              Idea Board
-            </h1>
-            <p className="text-surface-400 text-xs mt-0.5">Your personal brain dump — capture, refine, convert</p>
+            <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-amber-400" /> Idea Board</h1>
+            <p className="text-surface-400 text-xs mt-0.5">Capture headlines, tag them, expand into pages, then convert cleanly into tasks.</p>
           </div>
         </div>
 
-        {/* Quick add */}
-        <QuickAdd onAdd={handleQuickAdd} />
+        <QuickAdd onAdd={handleQuickAdd} knownTags={knownTags} />
 
-        {/* Filters */}
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           <div className="relative flex-1 min-w-36">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search ideas…"
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 transition-all"
-            />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ideas, tags, pages..." className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 transition-all" />
           </div>
+          <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
+            <option value="ALL">All tags</option>
+            {knownTags.map((t) => <option key={`${t.name}-${t.color}`} value={t.name}>{t.name}</option>)}
+          </select>
+          <select value={filterColor} onChange={(e) => setFilterColor(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
+            <option value="ALL">All colors</option>
+            {IDEA_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           {(["ALL", "IDEA", "THINKING", "CONVERTED", "DROPPED"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border",
-                filterStatus === s
-                  ? "bg-primary-500/20 text-primary-400 border-primary-500/40"
-                  : "bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200"
-              )}
-            >
+            <button key={s} onClick={() => setFilterStatus(s)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border", filterStatus === s ? "bg-primary-500/20 text-primary-400 border-primary-500/40" : "bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200")}>
               {s === "ALL" ? "All" : STATUS_CONFIG[s].label}
-              <span className="text-[10px] opacity-70">
-                {counts[s]}
-              </span>
+              <span className="text-[10px] opacity-70">{counts[s]}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-4">
-              <Lightbulb className="w-8 h-8 text-amber-400/50" />
-            </div>
-            <p className="text-surface-400 text-sm font-medium">
-              {search || filterStatus !== "ALL" ? "No ideas match your filter" : "No ideas yet"}
-            </p>
-            <p className="text-surface-600 text-xs mt-1">
-              {search || filterStatus !== "ALL" ? "Try a different filter" : "Use the bar above to dump your first idea"}
-            </p>
+            <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-4"><Lightbulb className="w-8 h-8 text-amber-400/50" /></div>
+            <p className="text-surface-400 text-sm font-medium">{search || filterStatus !== "ALL" || filterTag !== "ALL" || filterColor !== "ALL" ? "No ideas match your filter" : "No ideas yet"}</p>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Pinned section */}
             {pinnedIdeas.length > 0 && (
               <div>
-                <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                  <Pin className="w-3 h-3" /> Pinned
-                </p>
+                <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Pin className="w-3 h-3" /> Pinned</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {pinnedIdeas.map((idea) => (
-                    <IdeaCard
-                      key={idea.id}
-                      idea={idea}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                      onPin={handlePin}
-                      onStatusChange={handleStatusChange}
-                      onConvert={openConvert}
-                    />
-                  ))}
+                  {pinnedIdeas.map((idea) => <IdeaCard key={idea.id} idea={idea} onEdit={openEdit} onDelete={handleDelete} onPin={handlePin} onStatusChange={handleStatusChange} onConvert={openConvert} />)}
                 </div>
               </div>
             )}
-
-            {/* All other ideas */}
             {unpinnedIdeas.length > 0 && (
               <div>
-                {pinnedIdeas.length > 0 && (
-                  <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-widest mb-3">
-                    All Ideas
-                  </p>
-                )}
+                {pinnedIdeas.length > 0 && <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-widest mb-3">All Ideas</p>}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {unpinnedIdeas.map((idea) => (
-                    <IdeaCard
-                      key={idea.id}
-                      idea={idea}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                      onPin={handlePin}
-                      onStatusChange={handleStatusChange}
-                      onConvert={openConvert}
-                    />
-                  ))}
+                  {unpinnedIdeas.map((idea) => <IdeaCard key={idea.id} idea={idea} onEdit={openEdit} onDelete={handleDelete} onPin={handlePin} onStatusChange={handleStatusChange} onConvert={openConvert} />)}
                 </div>
               </div>
             )}
@@ -519,111 +475,102 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
         )}
       </div>
 
-      {/* ── Edit Modal ── */}
-      <Modal isOpen={!!editIdea} onClose={() => setEditIdea(null)} title="Edit Idea" size="md">
+      <Modal isOpen={!!editIdea} onClose={() => setEditIdea(null)} title="Edit Idea" size="lg">
         {editIdea && (
           <div className="space-y-4">
-            <Input
-              label="Title"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              autoFocus
-            />
+            <Input label="Headline" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} autoFocus />
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-surface-300">Notes</label>
-              <Textarea
-                placeholder="Expand your idea, add context, links, or rough notes…"
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                rows={5}
-              />
+              <label className="text-sm font-medium text-surface-300">Quick Summary</label>
+              <Textarea placeholder="Top-level summary..." value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} />
             </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-surface-300">Color</label>
-              <div className="flex gap-2 flex-wrap">
-                {IDEA_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setEditColor(c)}
-                    className={cn(
-                      "w-7 h-7 rounded-full transition-transform",
-                      editColor === c ? "scale-125 ring-2 ring-white/40" : "hover:scale-110"
-                    )}
-                    style={{ backgroundColor: c }}
-                  />
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-surface-300">Card color:</span>
+              {IDEA_COLORS.map((c) => <button key={c} onClick={() => setEditColor(c)} className={cn("w-6 h-6 rounded-full", editColor === c ? "ring-2 ring-white/40" : "")} style={{ backgroundColor: c }} />)}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-surface-300">Tags</p>
+              <div className="flex items-center gap-2">
+                <Input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Tag name" />
+                <input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="w-10 h-10 rounded border border-surface-600 bg-surface-800" />
+                <Button size="sm" onClick={addEditTag} variant="secondary"><Plus className="w-3.5 h-3.5" /></Button>
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {editTags.map((t) => (
+                  <button key={`${t.name}-${t.color}`} onClick={() => setEditTags((prev) => prev.filter((x) => x.name !== t.name))}><TagChip tag={t} /></button>
                 ))}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-surface-300">Detailed Pages</p>
+                <Button size="sm" variant="secondary" onClick={addPage}><Plus className="w-3.5 h-3.5 mr-1" /> Add Page</Button>
+              </div>
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-4 border border-surface-700 rounded-xl p-2 space-y-1 max-h-56 overflow-y-auto">
+                  {editPages.map((p) => (
+                    <div key={p.id} className={cn("flex items-center gap-1 rounded px-2 py-1", activePageId === p.id ? "bg-surface-700" : "hover:bg-surface-800") }>
+                      <button className="flex-1 text-left text-xs text-surface-200 truncate" onClick={() => setActivePageId(p.id)}>{p.title}</button>
+                      <button onClick={() => deletePage(p.id)} className="text-surface-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="col-span-8 space-y-2">
+                  {activePage ? (
+                    <>
+                      <Input value={activePage.title} onChange={(e) => updatePage(activePage.id, { title: e.target.value })} placeholder="Page title" />
+                      <Textarea rows={8} value={activePage.content} onChange={(e) => updatePage(activePage.id, { content: e.target.value })} placeholder="Detailed report/content for this page..." />
+                    </>
+                  ) : (
+                    <div className="text-xs text-surface-500 p-4 border border-dashed border-surface-700 rounded-xl">Create a page to write detailed report notes.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="secondary" onClick={() => setEditIdea(null)} size="sm">Cancel</Button>
-              <Button onClick={handleSaveEdit} loading={saving} disabled={!editTitle.trim()} size="sm">
-                <Check className="w-3.5 h-3.5 mr-1" /> Save
-              </Button>
+              <Button onClick={handleSaveEdit} loading={saving} disabled={!editTitle.trim()} size="sm"><Check className="w-3.5 h-3.5 mr-1" /> Save</Button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ── Convert Modal ── */}
-      <Modal isOpen={!!convertIdea} onClose={() => setConvertIdea(null)} title="Convert to Task" size="md">
+      <Modal isOpen={!!convertIdea} onClose={() => setConvertIdea(null)} title="Convert Idea to Task" size="lg">
         {convertIdea && (
           <div className="space-y-4">
-            <div className="bg-surface-750 rounded-xl p-4 border border-surface-700">
-              <p className="text-[10px] text-surface-500 uppercase tracking-widest mb-1">Idea</p>
-              <p className="text-sm font-semibold text-surface-100">{convertIdea.title}</p>
-              {convertIdea.body && (
-                <p className="text-xs text-surface-400 mt-1 line-clamp-2">{convertIdea.body}</p>
-              )}
+            <Input label="Task title" value={convertTitle} onChange={(e) => setConvertTitle(e.target.value)} />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-surface-300">Task description</label>
+              <Textarea rows={7} value={convertDescription} onChange={(e) => setConvertDescription(e.target.value)} />
             </div>
-
-            <div className="flex items-center gap-2 text-surface-400">
-              <div className="flex-1 h-px bg-surface-700" />
-              <ArrowRight className="w-4 h-4" />
-              <div className="flex-1 h-px bg-surface-700" />
-            </div>
-
-            <div className="space-y-3">
+            {convertIdea.tags.length > 0 && (
+              <div>
+                <p className="text-xs text-surface-400 mb-1 flex items-center gap-1"><Tag className="w-3.5 h-3.5" /> Tags will be included in task description:</p>
+                <div className="flex gap-1 flex-wrap">{convertIdea.tags.map((t) => <TagChip key={`${t.name}-${t.color}`} tag={t} />)}</div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-surface-300">Assign To</label>
-                <select
-                  value={convertAssignee}
-                  onChange={(e) => setConvertAssignee(e.target.value)}
-                  className="w-full bg-surface-800 border border-surface-600 rounded-xl px-4 py-2.5 text-sm text-surface-100 focus:outline-none focus:border-primary-500 transition-all"
-                >
+                <select value={convertAssignee} onChange={(e) => setConvertAssignee(e.target.value)} className="w-full bg-surface-800 border border-surface-600 rounded-xl px-4 py-2.5 text-sm text-surface-100">
                   <option value={user.userId}>Me ({user.firstName} {user.lastName})</option>
-                  {assignableUsers.filter((u) => u.id !== user.userId).map((u) => (
-                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName} — {u.roleLevel.name}</option>
-                  ))}
+                  {assignableUsers.filter((u) => u.id !== user.userId).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} - {u.roleLevel.name}</option>)}
                 </select>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-surface-300">Priority</label>
-                  <select
-                    value={convertPriority}
-                    onChange={(e) => setConvertPriority(e.target.value as Priority)}
-                    className="w-full bg-surface-800 border border-surface-600 rounded-xl px-4 py-2.5 text-sm text-surface-100 focus:outline-none focus:border-primary-500 transition-all"
-                  >
-                    {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
-                      <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
-                    ))}
-                  </select>
-                </div>
-                <Input
-                  label="Due Date (optional)"
-                  type="date"
-                  value={convertDueDate}
-                  onChange={(e) => setConvertDueDate(e.target.value)}
-                />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-surface-300">Priority</label>
+                <select value={convertPriority} onChange={(e) => setConvertPriority(e.target.value as Priority)} className="w-full bg-surface-800 border border-surface-600 rounded-xl px-4 py-2.5 text-sm text-surface-100">
+                  {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                </select>
               </div>
             </div>
-
+            <Input label="Due Date (optional)" type="date" value={convertDueDate} onChange={(e) => setConvertDueDate(e.target.value)} />
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="secondary" onClick={() => setConvertIdea(null)} size="sm">Cancel</Button>
-              <Button onClick={handleConvert} loading={converting} size="sm">
-                <Rocket className="w-3.5 h-3.5 mr-1" /> Create Task
-              </Button>
+              <Button onClick={handleConvert} loading={converting} size="sm" disabled={!convertTitle.trim()}><Rocket className="w-3.5 h-3.5 mr-1" /> Create Task</Button>
             </div>
           </div>
         )}

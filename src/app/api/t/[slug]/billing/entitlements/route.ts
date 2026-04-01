@@ -35,8 +35,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const chatAddon = Boolean(billing?.chatAddonEnabled);
   const recAddon = Boolean(billing?.recurringAddonEnabled);
-  const showChatNav = company.modules.includes("chat") && chatAddon && paidOk;
-  const showRecurringNav = company.modules.includes("recurring") && recAddon && paidOk;
+  // Company may enable add-ons via billing only; modules array is kept in sync in most flows but can drift.
+  const showChatNav = paidOk && (chatAddon || company.modules.includes("chat"));
+  const showRecurringNav = paidOk && (recAddon || company.modules.includes("recurring"));
 
   return NextResponse.json({
     plan,

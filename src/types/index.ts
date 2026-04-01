@@ -200,6 +200,17 @@ export function isRemoveMemberPayload(
 // ─── Idea Board ───────────────────────────────────────────────────────────
 
 export type IdeaStatus = "IDEA" | "THINKING" | "CONVERTED" | "DROPPED";
+export interface IdeaTag {
+  name: string;
+  color: string;
+}
+
+export interface IdeaPage {
+  id: string;
+  title: string;
+  content: string;
+  updatedAt: string;
+}
 
 export interface Idea {
   id: string;
@@ -208,6 +219,8 @@ export interface Idea {
   title: string;
   body: string | null;
   color: string;
+  tags?: IdeaTag[];
+  pages?: IdeaPage[];
   status: IdeaStatus;
   convertedTaskId: string | null;
   isPinned: boolean;
