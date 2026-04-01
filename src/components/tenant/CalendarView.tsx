@@ -109,6 +109,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   const [goalDate, setGoalDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [deletingCalendarId, setDeletingCalendarId] = useState<string | null>(null);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
 
   const year = currentDate.getFullYear();
@@ -253,6 +254,19 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       window.location.reload();
     } finally {
       setDeletingCalendarId(null);
+    }
+  }
+
+  async function deleteGoalEntry(ev: CalendarEvent) {
+    if (!ev.calendarId) return;
+    const ok = window.confirm(`Delete "${ev.title}" (${ev.kind === "MILESTONE" ? "Milestone" : "Goal"})?`);
+    if (!ok) return;
+    setDeletingEntryId(ev.id);
+    try {
+      await fetch(`/api/t/${slug}/calendars/${ev.calendarId}/entries/${ev.id}`, { method: "DELETE" });
+      window.location.reload();
+    } finally {
+      setDeletingEntryId(null);
     }
   }
 
@@ -605,6 +619,14 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                         {ev.notes && <p className="text-[10px] text-surface-500 mt-0.5 truncate">{ev.notes}</p>}
                       </div>
                       {ev.isDone && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      <button
+                        onClick={() => void deleteGoalEntry(ev)}
+                        disabled={deletingEntryId === ev.id}
+                        className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
+                        title="Delete goal/milestone"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -621,6 +643,8 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
           onSelectDate={setSelectedDate}
           slug={slug}
           userId={user.userId}
+          deletingEntryId={deletingEntryId}
+          onDeleteGoalEntry={deleteGoalEntry}
         />
       )}
 
@@ -660,6 +684,8 @@ function WeekView({
   onSelectDate,
   slug,
   userId,
+  deletingEntryId,
+  onDeleteGoalEntry,
 }: {
   weekDays: Date[];
   eventMap: DayEvents;
@@ -667,6 +693,8 @@ function WeekView({
   onSelectDate: (d: Date) => void;
   slug: string;
   userId: string;
+  deletingEntryId: string | null;
+  onDeleteGoalEntry: (ev: CalendarEvent) => Promise<void>;
 }) {
   return (
     <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
@@ -737,52 +765,64 @@ function WeekView({
             </div>
           ) : (
             (eventMap[dateKey(selectedDate)] ?? []).map((ev) => (
-              <Link
-                key={ev.id}
-                href={
-                  ev.type === "task"
-                    ? `/t/${slug}/tasks?task=${ev.taskId}`
-                    : ev.type === "recurring"
-                    ? `/t/${slug}/recurring`
-                    : `/t/${slug}/calendar`
-                }
-              >
-                <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
-                  {ev.type === "recurring" ? (
-                    <RotateCcw className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
-                  ) : ev.type === "goal" ? (
-                    ev.kind === "MILESTONE" ? (
-                      <Flag className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
-                    ) : (
-                      <Target className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
-                    )
+              ev.type === "goal" ? (
+                <div key={ev.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
+                  {ev.kind === "MILESTONE" ? (
+                    <Flag className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
                   ) : (
-                    <div className={cn(
-                      "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      PRIORITY_DOT_COLORS[ev.priority ?? "MEDIUM"]
-                    )} />
+                    <Target className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "text-sm font-medium truncate",
-                      ev.isOverdue ? "text-red-400" : "text-surface-200 group-hover:text-surface-100"
-                    )}>
-                      {ev.type === "recurring" ? "↺ " : ""}{ev.title}
-                    </p>
-                    <p className="text-[10px] text-surface-500 mt-0.5">
-                      {ev.type === "recurring"
-                        ? "Recurring task"
-                        : ev.type === "goal"
-                        ? ev.kind === "MILESTONE" ? "Milestone" : "Goal"
-                        : ev.isMyTask
-                        ? "Assigned to me"
-                        : "Team task"}
-                    </p>
+                    <p className="text-sm font-medium truncate text-surface-200 group-hover:text-surface-100">{ev.title}</p>
+                    <p className="text-[10px] text-surface-500 mt-0.5">{ev.kind === "MILESTONE" ? "Milestone" : "Goal"}</p>
                   </div>
-                  {ev.isOverdue && <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
-                  <ChevronRight className="w-3.5 h-3.5 text-surface-600 group-hover:text-surface-400 transition-colors" />
+                  <button
+                    onClick={() => void onDeleteGoalEntry(ev)}
+                    disabled={deletingEntryId === ev.id}
+                    className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
+                    title="Delete goal/milestone"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </Link>
+              ) : (
+                <Link
+                  key={ev.id}
+                  href={
+                    ev.type === "task"
+                      ? `/t/${slug}/tasks?task=${ev.taskId}`
+                      : `/t/${slug}/recurring`
+                  }
+                >
+                  <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
+                    {ev.type === "recurring" ? (
+                      <RotateCcw className="w-4 h-4 flex-shrink-0" style={{ color: ev.color }} />
+                    ) : (
+                      <div className={cn(
+                        "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                        PRIORITY_DOT_COLORS[ev.priority ?? "MEDIUM"]
+                      )} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "text-sm font-medium truncate",
+                        ev.isOverdue ? "text-red-400" : "text-surface-200 group-hover:text-surface-100"
+                      )}>
+                        {ev.type === "recurring" ? "↺ " : ""}{ev.title}
+                      </p>
+                      <p className="text-[10px] text-surface-500 mt-0.5">
+                        {ev.type === "recurring"
+                          ? "Recurring task"
+                          : ev.isMyTask
+                          ? "Assigned to me"
+                          : "Team task"}
+                      </p>
+                    </div>
+                    {ev.isOverdue && <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                    <ChevronRight className="w-3.5 h-3.5 text-surface-600 group-hover:text-surface-400 transition-colors" />
+                  </div>
+                </Link>
+              )
             ))
           )}
         </div>
