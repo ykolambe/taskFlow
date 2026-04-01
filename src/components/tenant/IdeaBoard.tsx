@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Lightbulb,
@@ -117,6 +117,25 @@ function makeId(): string {
     return crypto.randomUUID();
   }
   return `pg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatPageTextForTask(p: IdeaPage): string {
+  const sectionText = (p.sections ?? [])
+    .map((s) => `### ${s.heading || "Heading"}\nSection: ${s.section || "-"}\nNotes:\n${s.notes || "-"}`)
+    .join("\n\n");
+  return [`## ${p.title}`, p.content, sectionText].filter(Boolean).join("\n");
+}
+
+function buildConvertDescription(idea: RichIdea, includeBody: boolean, selectedPageIds: string[]): string {
+  const parts: string[] = [];
+  if (includeBody && idea.body?.trim()) parts.push(idea.body.trim());
+  const idSet = new Set(selectedPageIds);
+  const pagesText = idea.pages
+    .filter((p) => idSet.has(p.id))
+    .map(formatPageTextForTask)
+    .join("\n\n");
+  if (pagesText) parts.push(pagesText);
+  return parts.join("\n\n");
 }
 
 function TagChip({ tag }: { tag: IdeaTag }) {
@@ -311,10 +330,19 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   const [convertDueDate, setConvertDueDate] = useState("");
   const [convertTitle, setConvertTitle] = useState("");
   const [convertDescription, setConvertDescription] = useState("");
+  /** Include idea quick summary (body) in the generated task description */
+  const [convertIncludeBody, setConvertIncludeBody] = useState(true);
+  /** Page ids to append as formatted sections in the task description */
+  const [convertSelectedPageIds, setConvertSelectedPageIds] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
   const [creatorCollapsed, setCreatorCollapsed] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [loadingLinkedTasks, setLoadingLinkedTasks] = useState(false);
+
+  useEffect(() => {
+    if (!convertIdea) return;
+    setConvertDescription(buildConvertDescription(convertIdea, convertIncludeBody, convertSelectedPageIds));
+  }, [convertIdea, convertIncludeBody, convertSelectedPageIds]);
 
   const knownTags = useMemo(() => {
     const map = new Map<string, IdeaTag>();
@@ -492,15 +520,8 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     setConvertPriority("MEDIUM");
     setConvertDueDate("");
     setConvertTitle(idea.title);
-    const pagesText = idea.pages
-      .map((p) => {
-        const sectionText = (p.sections ?? [])
-          .map((s) => `### ${s.heading || "Heading"}\nSection: ${s.section || "-"}\nNotes:\n${s.notes || "-"}`)
-          .join("\n\n");
-        return [`## ${p.title}`, p.content, sectionText].filter(Boolean).join("\n");
-      })
-      .join("\n\n");
-    setConvertDescription([idea.body ?? "", pagesText].filter(Boolean).join("\n\n"));
+    setConvertIncludeBody(true);
+    setConvertSelectedPageIds(idea.pages.map((p) => p.id));
   };
 
   const handleConvert = async () => {
@@ -742,6 +763,76 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
         {convertIdea && (
           <div className="space-y-4">
             <Input label="Task title" value={convertTitle} onChange={(e) => setConvertTitle(e.target.value)} />
+
+            {(convertIdea.body?.trim() || convertIdea.pages.length > 0) && (
+              <div className="rounded-xl border border-surface-700 bg-surface-850/50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-surface-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-primary-400" />
+                    Include in task description
+                  </p>
+                  {convertIdea.pages.length > 1 && (
+                    <div className="flex gap-2 text-[10px]">
+                      <button
+                        type="button"
+                        className="text-primary-400 hover:text-primary-300"
+                        onClick={() => setConvertSelectedPageIds(convertIdea.pages.map((p) => p.id))}
+                      >
+                        All pages
+                      </button>
+                      <span className="text-surface-600">·</span>
+                      <button type="button" className="text-surface-400 hover:text-surface-300" onClick={() => setConvertSelectedPageIds([])}>
+                        No pages
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {convertIdea.body?.trim() && (
+                  <label className="flex items-start gap-2 cursor-pointer text-xs text-surface-200">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-surface-600"
+                      checked={convertIncludeBody}
+                      onChange={(e) => setConvertIncludeBody(e.target.checked)}
+                    />
+                    <span>
+                      <span className="font-medium text-surface-100">Quick summary</span>
+                      <span className="text-surface-500 block mt-0.5">Main idea notes (first text field on the card)</span>
+                    </span>
+                  </label>
+                )}
+                {convertIdea.pages.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-surface-700/80">
+                    <p className="text-[10px] uppercase tracking-wider text-surface-500">Detailed pages</p>
+                    {convertIdea.pages.map((p) => (
+                      <label key={p.id} className="flex items-start gap-2 cursor-pointer text-xs text-surface-200">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 rounded border-surface-600"
+                          checked={convertSelectedPageIds.includes(p.id)}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setConvertSelectedPageIds((prev) =>
+                              on ? [...prev, p.id] : prev.filter((id) => id !== p.id)
+                            );
+                          }}
+                        />
+                        <span className="min-w-0">
+                          <span className="font-medium text-surface-100 truncate block">{p.title || "Untitled page"}</span>
+                          {(p.content?.trim() || (p.sections?.length ?? 0) > 0) && (
+                            <span className="text-surface-500 text-[10px]">Content + sections</span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-surface-500 pt-1">
+                  Updating these options refreshes the description below; you can still edit the text before creating the task.
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-surface-300">Task description</label>
               <Textarea rows={7} value={convertDescription} onChange={(e) => setConvertDescription(e.target.value)} />
