@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -89,16 +90,27 @@ export async function POST(req: NextRequest, { params }: Params) {
       const isMissingColumn = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2022";
       if (!isMissingColumn) throw e;
       // Fallback for environments where DB migration has not yet added tags/pages.
-      idea = await prisma.idea.create({
-        data: {
-          companyId: user.companyId,
-          userId: user.userId,
-          title: title.trim(),
-          body: body?.trim() || null,
-          color: color || "#6366f1",
-          status: status || "IDEA",
-        },
-      });
+      const ideaId = randomUUID();
+      const rows = await prisma.$queryRaw<Array<{
+        id: string;
+        companyId: string;
+        userId: string;
+        title: string;
+        body: string | null;
+        color: string;
+        status: string;
+        convertedTaskId: string | null;
+        isPinned: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }>>`
+        INSERT INTO "ideas" ("id", "companyId", "userId", "title", "body", "color", "status", "isPinned", "createdAt", "updatedAt")
+        VALUES (${ideaId}, ${user.companyId}, ${user.userId}, ${title.trim()}, ${body?.trim() || null}, ${color || "#6366f1"}, ${status || "IDEA"}::"IdeaStatus", false, NOW(), NOW())
+        RETURNING "id", "companyId", "userId", "title", "body", "color", "status", "convertedTaskId", "isPinned", "createdAt", "updatedAt"
+      `;
+      const row = rows[0];
+      if (!row) throw new Error("Idea insert fallback failed");
+      idea = { ...row, tags: [], pages: [] };
     }
 
     return NextResponse.json({ success: true, data: idea }, { status: 201 });

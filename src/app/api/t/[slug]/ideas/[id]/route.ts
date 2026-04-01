@@ -80,16 +80,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const isMissingColumn = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2022";
       if (!isMissingColumn) throw e;
       // Fallback for environments where DB migration has not yet added tags/pages.
-      updated = await prisma.idea.update({
-        where: { id },
-        data: {
-          ...(title !== undefined && { title: title.trim() }),
-          ...(body !== undefined && { body: body?.trim() || null }),
-          ...(color !== undefined && { color }),
-          ...(status !== undefined && { status }),
-          ...(isPinned !== undefined && { isPinned }),
-        },
-      });
+      const rows = await prisma.$queryRaw<Array<{
+        id: string;
+        companyId: string;
+        userId: string;
+        title: string;
+        body: string | null;
+        color: string;
+        status: string;
+        convertedTaskId: string | null;
+        isPinned: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }>>`
+        UPDATE "ideas"
+        SET
+          "title" = ${title !== undefined ? String(title).trim() : idea.title},
+          "body" = ${body !== undefined ? (body?.trim() || null) : idea.body},
+          "color" = ${color !== undefined ? color : idea.color},
+          "status" = ${(status !== undefined ? status : idea.status)}::"IdeaStatus",
+          "isPinned" = ${isPinned !== undefined ? Boolean(isPinned) : idea.isPinned},
+          "updatedAt" = NOW()
+        WHERE "id" = ${id}
+        RETURNING "id", "companyId", "userId", "title", "body", "color", "status", "convertedTaskId", "isPinned", "createdAt", "updatedAt"
+      `;
+      const row = rows[0];
+      if (!row) return NextResponse.json({ error: "Idea not found" }, { status: 404 });
+      updated = { ...row, tags: [], pages: [] };
     }
 
     return NextResponse.json({ success: true, data: updated });
