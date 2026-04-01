@@ -69,10 +69,10 @@ export default function TenantDashboard({
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
       {/* Welcome */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-surface-100">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-surface-100">
           Good day, {user.firstName} 👋
         </h1>
-        <p className="text-surface-400 text-sm mt-1">
+        <p className="text-slate-600 dark:text-surface-400 text-sm mt-1">
           {isExecutiveDashboardUser(user)
             ? "Leadership overview — team load, follow-ups, and what needs your attention."
             : "Here's your workspace overview"}
@@ -98,41 +98,41 @@ export default function TenantDashboard({
 
       {/* Leadership snapshot — directors / C-suite / top levels */}
       {executiveInsights && (
-        <div className="bg-gradient-to-br from-violet-500/10 via-surface-800 to-surface-800 border border-violet-500/20 rounded-2xl p-5 space-y-4">
+        <div className="bg-gradient-to-br from-violet-500/15 via-surface-100 to-surface-200/50 dark:from-violet-500/10 dark:via-surface-800 dark:to-surface-800 border border-violet-200/80 dark:border-violet-500/20 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <Crown className="w-5 h-5 text-violet-400" />
-            <h2 className="font-semibold text-surface-100 text-sm tracking-tight">Leadership snapshot</h2>
+            <Crown className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+            <h2 className="font-semibold text-slate-900 dark:text-surface-100 text-sm tracking-tight">Leadership snapshot</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Link
               href={`/t/${slug}/team`}
-              className="rounded-xl bg-surface-900/60 border border-surface-700/80 p-4 hover:border-violet-500/30 transition-colors"
+              className="rounded-xl bg-white/95 dark:bg-surface-900/60 border border-slate-200/90 dark:border-surface-700/80 p-4 hover:border-violet-400/60 dark:hover:border-violet-500/30 transition-colors shadow-sm"
             >
-              <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold uppercase tracking-wider mb-1">
-                <Users className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 text-violet-900 dark:text-violet-300 text-xs font-semibold uppercase tracking-wider mb-1">
+                <Users className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400" />
                 Direct reports
               </div>
-              <p className="text-2xl font-bold text-surface-50">{executiveInsights.directReports}</p>
-              <p className="text-[11px] text-surface-500 mt-1">People reporting to you</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-surface-50">{executiveInsights.directReports}</p>
+              <p className="text-[11px] text-slate-600 dark:text-surface-500 mt-1">People reporting to you</p>
             </Link>
-            <div className="rounded-xl bg-surface-900/60 border border-surface-700/80 p-4">
-              <div className="flex items-center gap-2 text-sky-300 text-xs font-semibold uppercase tracking-wider mb-1">
-                <Target className="w-3.5 h-3.5" />
+            <div className="rounded-xl bg-white/95 dark:bg-surface-900/60 border border-slate-200/90 dark:border-surface-700/80 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-sky-900 dark:text-sky-300 text-xs font-semibold uppercase tracking-wider mb-1">
+                <Target className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" />
                 Team in view
               </div>
-              <p className="text-2xl font-bold text-surface-50">{executiveInsights.teamSize}</p>
-              <p className="text-[11px] text-surface-500 mt-1">You + everyone below in the org tree</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-surface-50">{executiveInsights.teamSize}</p>
+              <p className="text-[11px] text-slate-600 dark:text-surface-500 mt-1">You + everyone below in the org tree</p>
             </div>
             <Link
               href={`/t/${slug}/tasks`}
-              className="rounded-xl bg-surface-900/60 border border-surface-700/80 p-4 hover:border-amber-500/30 transition-colors"
+              className="rounded-xl bg-white/95 dark:bg-surface-900/60 border border-slate-200/90 dark:border-surface-700/80 p-4 hover:border-amber-400/60 dark:hover:border-amber-500/30 transition-colors shadow-sm"
             >
-              <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-1">
-                <Flame className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-300 text-xs font-semibold uppercase tracking-wider mb-1">
+                <Flame className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                 High / urgent open
               </div>
-              <p className="text-2xl font-bold text-surface-50">{executiveInsights.highPriorityOpen}</p>
-              <p className="text-[11px] text-surface-500 mt-1">Across your visible team (active work)</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-surface-50">{executiveInsights.highPriorityOpen}</p>
+              <p className="text-[11px] text-slate-600 dark:text-surface-500 mt-1">Across your visible team (active work)</p>
             </Link>
           </div>
         </div>

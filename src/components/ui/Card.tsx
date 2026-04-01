@@ -45,29 +45,32 @@ export function StatCard({
 }) {
   const colorClasses = {
     primary: {
-      badge: "bg-primary-500/10 text-primary-300 border border-primary-500/20",
+      badge:
+        "bg-primary-500/10 text-primary-800 dark:text-primary-300 border border-primary-500/25 dark:border-primary-500/20",
       glow: "bg-primary-500/5",
-      border: "border-primary-500/20",
+      border: "border-primary-500/25 dark:border-primary-500/20",
     },
     success: {
-      badge: "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
+      badge:
+        "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 dark:border-emerald-500/20",
       glow: "bg-emerald-500/5",
-      border: "border-emerald-500/20",
+      border: "border-emerald-500/25 dark:border-emerald-500/20",
     },
     warning: {
-      badge: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
+      badge:
+        "bg-amber-500/10 text-amber-900 dark:text-amber-300 border border-amber-500/25 dark:border-amber-500/20",
       glow: "bg-amber-500/5",
-      border: "border-amber-500/20",
+      border: "border-amber-500/25 dark:border-amber-500/20",
     },
     danger: {
-      badge: "bg-red-500/10 text-red-300 border border-red-500/20",
+      badge: "bg-red-500/10 text-red-800 dark:text-red-300 border border-red-500/25 dark:border-red-500/20",
       glow: "bg-red-500/5",
-      border: "border-red-500/20",
+      border: "border-red-500/25 dark:border-red-500/20",
     },
     info: {
-      badge: "bg-sky-500/10 text-sky-300 border border-sky-500/20",
+      badge: "bg-sky-500/10 text-sky-800 dark:text-sky-300 border border-sky-500/25 dark:border-sky-500/20",
       glow: "bg-sky-500/5",
-      border: "border-sky-500/20",
+      border: "border-sky-500/25 dark:border-sky-500/20",
     },
   };
 
@@ -84,9 +87,9 @@ export function StatCard({
       />
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-[11px] font-bold text-surface-500 uppercase tracking-widest">{title}</p>
-          <p className="text-3xl font-extrabold text-surface-50 mt-1.5 tracking-tight">{value}</p>
-          {subtitle && <p className="text-xs text-surface-500 mt-1">{subtitle}</p>}
+          <p className="text-[11px] font-bold text-slate-600 dark:text-surface-500 uppercase tracking-widest">{title}</p>
+          <p className="text-3xl font-extrabold text-slate-900 dark:text-surface-50 mt-1.5 tracking-tight">{value}</p>
+          {subtitle && <p className="text-xs text-slate-600 dark:text-surface-500 mt-1">{subtitle}</p>}
           {trend && (
             <p
               className={cn(

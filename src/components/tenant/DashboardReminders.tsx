@@ -186,11 +186,11 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
   );
 
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+    <div className="bg-white/95 dark:bg-surface-800 border border-slate-200/90 dark:border-surface-700 rounded-2xl overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-surface-700">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-violet-400" />
-          <h2 className="font-semibold text-surface-100 text-sm">Reminders</h2>
+          <Bell className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+          <h2 className="font-semibold text-slate-900 dark:text-surface-100 text-sm">Reminders</h2>
         </div>
         <Button size="sm" variant="secondary" onClick={() => setOpen((v) => !v)} className="gap-1">
           <Plus className="w-3.5 h-3.5" />
@@ -199,16 +199,18 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
       </div>
 
       {open && (
-        <div className="px-5 py-4 border-b border-surface-700/80 space-y-3 bg-surface-900/40">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-surface-700/80 space-y-3 bg-surface-100/80 dark:bg-surface-900/40">
           <Input placeholder="What should we remind you about?" value={title} onChange={(e) => setTitle(e.target.value)} />
           <Textarea placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
           <div>
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-surface-500">When</label>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 dark:text-surface-500">
+              When
+            </label>
             <input
               type="datetime-local"
               value={remindAt}
               onChange={(e) => setRemindAt(e.target.value)}
-              className="mt-1 w-full bg-surface-900/80 border border-surface-700/80 rounded-xl px-4 py-2.5 text-sm text-surface-100"
+              className="mt-1 w-full bg-white dark:bg-surface-900/80 border border-slate-300 dark:border-surface-700/80 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-surface-100"
             />
           </div>
           <Button size="sm" loading={saving} onClick={handleAdd} disabled={!title.trim() || !remindAt}>
@@ -218,23 +220,23 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
       )}
 
       {upcoming.length === 0 ? (
-        <div className="px-5 py-10 text-center text-surface-500 text-sm">
-          <Clock className="w-8 h-8 mx-auto mb-2 text-surface-600" />
+        <div className="px-5 py-10 text-center text-slate-600 dark:text-surface-500 text-sm">
+          <Clock className="w-8 h-8 mx-auto mb-2 text-slate-500 dark:text-surface-600" />
           No active reminders. Add one for follow-ups, 1:1s, or deadlines.
         </div>
       ) : (
-        <div className="divide-y divide-surface-700/50">
+        <div className="divide-y divide-slate-200 dark:divide-surface-700/50">
           {overdue.length > 0 && (
-            <div className="px-5 py-2 bg-red-500/5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">Overdue</p>
+            <div className="px-5 py-2 bg-red-500/10 dark:bg-red-500/5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-red-800 dark:text-red-400">Overdue</p>
             </div>
           )}
           {overdue.map((r) => (
             <ReminderLine key={r.id} r={r} onToggle={() => toggleDone(r)} onDelete={() => remove(r.id)} overdue />
           ))}
           {soon.length > 0 && overdue.length > 0 && (
-            <div className="px-5 py-2 bg-surface-800/80">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-surface-500">Upcoming</p>
+            <div className="px-5 py-2 bg-surface-100/90 dark:bg-surface-800/80">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-700 dark:text-surface-500">Upcoming</p>
             </div>
           )}
           {soon.map((r) => (
@@ -246,7 +248,7 @@ export default function DashboardReminders({ slug, initial, initialHasMore = fal
                 type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="text-xs font-medium text-violet-400 hover:text-violet-300 inline-flex items-center gap-2 disabled:opacity-50"
+                className="text-xs font-medium text-violet-800 hover:text-violet-950 dark:text-violet-400 dark:hover:text-violet-300 inline-flex items-center gap-2 disabled:opacity-50"
               >
                 {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Load more reminders
@@ -284,10 +286,19 @@ function ReminderLine({
         {r.isDone && <Check className="w-3.5 h-3.5" />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-medium", r.isDone ? "text-surface-500 line-through" : "text-surface-100")}>
+        <p
+          className={cn(
+            "text-sm font-medium",
+            r.isDone ? "text-slate-500 line-through dark:text-surface-500" : "text-slate-900 dark:text-surface-100"
+          )}
+        >
           {r.title}
         </p>
-        {r.note && <p className="text-xs text-surface-500 mt-0.5 whitespace-pre-wrap">{normalizeReminderNote(r.note)}</p>}
+        {r.note && (
+          <p className="text-xs text-slate-600 dark:text-surface-500 mt-0.5 whitespace-pre-wrap">
+            {normalizeReminderNote(r.note)}
+          </p>
+        )}
         <p className={cn("text-[11px] mt-1 flex items-center gap-1", dueTextClass(r.remindAt, overdue))}>
           <Clock className="w-3 h-3" />
           {formatDateTime(r.remindAt)}
@@ -296,7 +307,7 @@ function ReminderLine({
       <button
         type="button"
         onClick={onDelete}
-        className="text-surface-600 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 flex-shrink-0"
+        className="text-slate-600 hover:text-red-600 dark:text-surface-600 dark:hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 flex-shrink-0"
         title="Delete"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -306,13 +317,13 @@ function ReminderLine({
 }
 
 function dueTextClass(remindAtIso: string, overdue?: boolean): string {
-  if (overdue) return "text-red-400";
+  if (overdue) return "text-red-700 dark:text-red-400";
   const now = Date.now();
   const at = new Date(remindAtIso).getTime();
   const days = (at - now) / (24 * 60 * 60 * 1000);
-  if (days <= 3) return "text-red-300";
-  if (days <= 7) return "text-amber-300";
-  return "text-surface-500";
+  if (days <= 3) return "text-red-700 dark:text-red-300";
+  if (days <= 7) return "text-amber-900 dark:text-amber-300";
+  return "text-slate-600 dark:text-surface-500";
 }
 
 function urgencyClass(remindAtIso: string, overdue?: boolean): string {

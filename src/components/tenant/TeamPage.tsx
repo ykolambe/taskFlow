@@ -204,7 +204,11 @@ export default function TeamPage({
         if (!res.ok) { toast.error(data.error || "Failed"); return; }
         if (data.credentials) {
           setNewCreds(data.credentials);
-          toast.success("Team member added! Share login credentials.");
+          toast.success(
+            data.reactivated
+              ? "Previous member reactivated with a new password. Share login credentials."
+              : "Team member added! Share login credentials."
+          );
         } else {
           toast.success("Team member added!");
         }
