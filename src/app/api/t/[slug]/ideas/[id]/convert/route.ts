@@ -30,6 +30,34 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   try {
     const { title, description, assigneeId, priority = "MEDIUM", dueDate, tags } = await req.json();
+    const company = await prisma.company.findUnique({
+      where: { id: user.companyId },
+      select: { id: true },
+    });
+    if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+
+    const allUsers = await prisma.user.findMany({
+      where: { companyId: company.id, isTenantBootstrapAccount: false, isActive: true },
+      select: { id: true, parentId: true, roleLevel: { select: { level: true } } },
+    });
+    const getSubtreeIds = (userId: string): string[] => {
+      const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
+      return [userId, ...children.flatMap((cid) => getSubtreeIds(cid))];
+    };
+    const visibleIds = getSubtreeIds(user.userId);
+    const currentLevel = allUsers.find((u) => u.id === user.userId)?.roleLevel?.level ?? user.level ?? 0;
+    const sameLevelIds = allUsers
+      .filter((u) => (u.roleLevel?.level ?? Number.NaN) === currentLevel)
+      .map((u) => u.id);
+    const assignableIds = new Set([...visibleIds, ...sameLevelIds]);
+    const finalAssigneeId = assigneeId || user.userId;
+    if (!assignableIds.has(finalAssigneeId)) {
+      return NextResponse.json(
+        { error: "You can only assign tasks to yourself, same-level peers, or people below you" },
+        { status: 403 }
+      );
+    }
+
     const taskTitle = typeof title === "string" && title.trim() ? title.trim() : idea.title;
     const taskDescription =
       typeof description === "string"
@@ -50,7 +78,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: {
         companyId: user.companyId,
         creatorId: user.userId,
-        assigneeId: assigneeId || user.userId,
+        assigneeId: finalAssigneeId,
         title: taskTitle,
         description: withTagPrefix,
         priority,

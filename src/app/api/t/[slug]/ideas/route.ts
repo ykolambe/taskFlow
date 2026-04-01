@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ slug: string }> };
 type IdeaTag = { name: string; color: string };
-type IdeaPage = { id: string; title: string; content: string; updatedAt: string };
+type IdeaPageSection = { id: string; heading: string; section: string; notes: string };
+type IdeaPage = { id: string; title: string; content: string; sections: IdeaPageSection[]; updatedAt: string };
 
 function sanitizeTags(input: unknown): IdeaTag[] {
   if (!Array.isArray(input)) return [];
@@ -33,11 +34,32 @@ function sanitizePages(input: unknown): IdeaPage[] {
       const title = typeof raw.title === "string" ? raw.title.trim() : "";
       const content = typeof raw.content === "string" ? raw.content : "";
       const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString();
+      const sections = Array.isArray(raw.sections)
+        ? raw.sections
+            .map((s) => {
+              if (!s || typeof s !== "object") return null;
+              const rs = s as Record<string, unknown>;
+              const sid = typeof rs.id === "string" ? rs.id.trim() : "";
+              const heading = typeof rs.heading === "string" ? rs.heading.trim() : "";
+              const section = typeof rs.section === "string" ? rs.section.trim() : "";
+              const notes = typeof rs.notes === "string" ? rs.notes.trim() : "";
+              if (!sid && !heading && !section && !notes) return null;
+              return {
+                id: sid.slice(0, 64) || `sec_${Date.now()}`,
+                heading: heading.slice(0, 120),
+                section: section.slice(0, 120),
+                notes: notes.slice(0, 5000),
+              };
+            })
+            .filter((v): v is IdeaPageSection => Boolean(v))
+            .slice(0, 60)
+        : [];
       if (!id || !title) return null;
       return {
         id: id.slice(0, 64),
         title: title.slice(0, 120),
         content: content.slice(0, 30_000),
+        sections,
         updatedAt,
       };
     })

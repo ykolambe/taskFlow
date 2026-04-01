@@ -16,12 +16,14 @@ import {
   Search,
   Tag,
   FileText,
+  PanelTopClose,
+  PanelTopOpen,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { TenantTokenPayload } from "@/lib/auth";
-import { Idea, IdeaStatus, IdeaTag, IdeaPage, User as UserType, Priority } from "@/types";
+import { Idea, IdeaStatus, IdeaTag, IdeaPage, IdeaPageSection, User as UserType, Priority } from "@/types";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -62,8 +64,22 @@ function normalizePage(raw: unknown): IdeaPage | null {
   const title = typeof p.title === "string" ? p.title : "";
   const content = typeof p.content === "string" ? p.content : "";
   const updatedAt = typeof p.updatedAt === "string" ? p.updatedAt : new Date().toISOString();
+  const sections = Array.isArray(p.sections)
+    ? p.sections
+        .map((s) => {
+          if (!s || typeof s !== "object") return null;
+          const rs = s as Record<string, unknown>;
+          return {
+            id: typeof rs.id === "string" ? rs.id : makeId(),
+            heading: typeof rs.heading === "string" ? rs.heading : "",
+            section: typeof rs.section === "string" ? rs.section : "",
+            notes: typeof rs.notes === "string" ? rs.notes : "",
+          };
+        })
+        .filter((v): v is IdeaPageSection => Boolean(v))
+    : [];
   if (!id || !title) return null;
-  return { id, title, content, updatedAt };
+  return { id, title, content, sections, updatedAt };
 }
 
 function normalizeIdea(idea: Idea): RichIdea {
@@ -172,9 +188,20 @@ function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#22c55e");
 
+  const deriveTitleFromBody = (text: string): string => {
+    const firstLine = text
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? "";
+    return firstLine.slice(0, 120);
+  };
+
+  const canSubmit = Boolean(title.trim() || body.trim());
+
   const submit = () => {
-    if (!title.trim()) return;
-    onAdd({ title: title.trim(), body: body.trim(), color, tags });
+    if (!canSubmit) return;
+    const resolvedTitle = title.trim() || deriveTitleFromBody(body);
+    onAdd({ title: resolvedTitle, body: body.trim(), color, tags });
     setTitle("");
     setBody("");
     setTags([]);
@@ -192,7 +219,7 @@ function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body
     <div className="p-4 bg-surface-800 border border-surface-700 rounded-2xl space-y-3">
       <div className="flex items-center gap-2">
         <Lightbulb className="w-4 h-4 text-primary-400 flex-shrink-0" />
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="Dump idea headline..." className="flex-1 bg-transparent text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none min-w-0" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="Dump idea headline... (optional if details below)" className="flex-1 bg-transparent text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none min-w-0" />
       </div>
       <Textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Optional details, context, links..." />
 
@@ -229,7 +256,7 @@ function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body
       </div>
 
       <div className="flex justify-end">
-        <button onClick={submit} disabled={!title.trim()} className="flex-shrink-0 bg-primary-500 hover:bg-primary-400 disabled:opacity-30 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Idea</button>
+        <button onClick={submit} disabled={!canSubmit} className="flex-shrink-0 bg-primary-500 hover:bg-primary-400 disabled:opacity-30 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Idea</button>
       </div>
     </div>
   );
@@ -260,6 +287,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   const [convertTitle, setConvertTitle] = useState("");
   const [convertDescription, setConvertDescription] = useState("");
   const [converting, setConverting] = useState(false);
+  const [creatorCollapsed, setCreatorCollapsed] = useState(false);
 
   const knownTags = useMemo(() => {
     const map = new Map<string, IdeaTag>();
@@ -334,7 +362,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     setEditBody(idea.body ?? "");
     setEditColor(idea.color);
     setEditTags(idea.tags);
-    setEditPages(idea.pages.length ? idea.pages : [{ id: makeId(), title: "Page 1", content: "", updatedAt: new Date().toISOString() }]);
+    setEditPages(idea.pages.length ? idea.pages : [{ id: makeId(), title: "Page 1", content: "", sections: [], updatedAt: new Date().toISOString() }]);
     setActivePageId((idea.pages[0]?.id ?? null) || null);
   };
 
@@ -347,13 +375,53 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   };
 
   const addPage = () => {
-    const next = { id: makeId(), title: `Page ${editPages.length + 1}`, content: "", updatedAt: new Date().toISOString() };
+    const next = { id: makeId(), title: `Page ${editPages.length + 1}`, content: "", sections: [], updatedAt: new Date().toISOString() };
     setEditPages((prev) => [...prev, next]);
     setActivePageId(next.id);
   };
 
   const updatePage = (id: string, patch: Partial<IdeaPage>) => {
     setEditPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p)));
+  };
+
+  const addPageSection = (pageId: string) => {
+    const nextSection: IdeaPageSection = {
+      id: makeId(),
+      heading: "",
+      section: "",
+      notes: "",
+    };
+    setEditPages((prev) =>
+      prev.map((p) =>
+        p.id === pageId
+          ? { ...p, sections: [...(p.sections ?? []), nextSection], updatedAt: new Date().toISOString() }
+          : p
+      )
+    );
+  };
+
+  const updatePageSection = (pageId: string, sectionId: string, patch: Partial<IdeaPageSection>) => {
+    setEditPages((prev) =>
+      prev.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              sections: (p.sections ?? []).map((s) => (s.id === sectionId ? { ...s, ...patch } : s)),
+              updatedAt: new Date().toISOString(),
+            }
+          : p
+      )
+    );
+  };
+
+  const removePageSection = (pageId: string, sectionId: string) => {
+    setEditPages((prev) =>
+      prev.map((p) =>
+        p.id === pageId
+          ? { ...p, sections: (p.sections ?? []).filter((s) => s.id !== sectionId), updatedAt: new Date().toISOString() }
+          : p
+      )
+    );
   };
 
   const deletePage = (id: string) => {
@@ -388,7 +456,14 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     setConvertPriority("MEDIUM");
     setConvertDueDate("");
     setConvertTitle(idea.title);
-    const pagesText = idea.pages.map((p) => `## ${p.title}\n${p.content}`).join("\n\n");
+    const pagesText = idea.pages
+      .map((p) => {
+        const sectionText = (p.sections ?? [])
+          .map((s) => `### ${s.heading || "Heading"}\nSection: ${s.section || "-"}\nNotes:\n${s.notes || "-"}`)
+          .join("\n\n");
+        return [`## ${p.title}`, p.content, sectionText].filter(Boolean).join("\n");
+      })
+      .join("\n\n");
     setConvertDescription([idea.body ?? "", pagesText].filter(Boolean).join("\n\n"));
   };
 
@@ -428,9 +503,18 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
             <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-amber-400" /> Idea Board</h1>
             <p className="text-surface-400 text-xs mt-0.5">Capture headlines, tag them, expand into pages, then convert cleanly into tasks.</p>
           </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setCreatorCollapsed((v) => !v)}
+            title={creatorCollapsed ? "Expand creation panel" : "Collapse creation panel"}
+          >
+            {creatorCollapsed ? <PanelTopOpen className="w-4 h-4 mr-1" /> : <PanelTopClose className="w-4 h-4 mr-1" />}
+            {creatorCollapsed ? "Expand" : "Collapse"}
+          </Button>
         </div>
 
-        <QuickAdd onAdd={handleQuickAdd} knownTags={knownTags} />
+        {!creatorCollapsed && <QuickAdd onAdd={handleQuickAdd} knownTags={knownTags} />}
 
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           <div className="relative flex-1 min-w-36">
@@ -529,6 +613,52 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
                     <>
                       <Input value={activePage.title} onChange={(e) => updatePage(activePage.id, { title: e.target.value })} placeholder="Page title" />
                       <Textarea rows={8} value={activePage.content} onChange={(e) => updatePage(activePage.id, { content: e.target.value })} placeholder="Detailed report/content for this page..." />
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Sections</p>
+                          <Button size="sm" variant="secondary" onClick={() => addPageSection(activePage.id)}>
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Add Section
+                          </Button>
+                        </div>
+                        {(activePage.sections ?? []).length === 0 ? (
+                          <div className="text-xs text-surface-500 p-3 border border-dashed border-surface-700 rounded-xl">
+                            Add sections with heading, section label and notes for clear structure.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {(activePage.sections ?? []).map((sec, idx) => (
+                              <div key={sec.id} className="rounded-xl border border-surface-700 bg-surface-850/60 p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs text-surface-400 font-medium">Section {idx + 1}</p>
+                                  <button
+                                    onClick={() => removePageSection(activePage.id, sec.id)}
+                                    className="text-surface-500 hover:text-red-400"
+                                    title="Remove section"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <Input
+                                  value={sec.heading}
+                                  onChange={(e) => updatePageSection(activePage.id, sec.id, { heading: e.target.value })}
+                                  placeholder="Heading (e.g. Background)"
+                                />
+                                <Input
+                                  value={sec.section}
+                                  onChange={(e) => updatePageSection(activePage.id, sec.id, { section: e.target.value })}
+                                  placeholder="Section label (e.g. Market Context)"
+                                />
+                                <Textarea
+                                  rows={4}
+                                  value={sec.notes}
+                                  onChange={(e) => updatePageSection(activePage.id, sec.id, { notes: e.target.value })}
+                                  placeholder="Notes / observations / details..."
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <div className="text-xs text-surface-500 p-4 border border-dashed border-surface-700 rounded-xl">Create a page to write detailed report notes.</div>

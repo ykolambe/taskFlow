@@ -139,6 +139,37 @@ export interface RecurringTask {
   assignee: UserBrief;
 }
 
+export type CalendarType = "ORG" | "PERSONAL";
+export type CalendarEntryKind = "GOAL" | "MILESTONE";
+
+export interface CalendarCollection {
+  id: string;
+  companyId: string;
+  ownerUserId: string | null;
+  name: string;
+  color: string;
+  type: CalendarType;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEntry {
+  id: string;
+  companyId: string;
+  calendarId: string;
+  creatorId: string;
+  title: string;
+  notes: string | null;
+  kind: CalendarEntryKind;
+  color: string;
+  startAt: string;
+  endAt: string | null;
+  isDone: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Approval ─────────────────────────────────────────────────────────────
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -209,7 +240,15 @@ export interface IdeaPage {
   id: string;
   title: string;
   content: string;
+  sections?: IdeaPageSection[];
   updatedAt: string;
+}
+
+export interface IdeaPageSection {
+  id: string;
+  heading: string;
+  section: string;
+  notes: string;
 }
 
 export interface Idea {

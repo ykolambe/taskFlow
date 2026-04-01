@@ -45,6 +45,8 @@ model Company {
   userReminders    UserReminder[]
   channels         Channel[]
   channelMessages  ChannelMessage[]
+  calendars        CalendarCollection[]
+  calendarEntries  CalendarEntry[]
   infraConfig      TenantInfraConfig?
   provisioningJobs TenantProvisioningJob[]
   aiUsageLogs      TenantAiUsageLog[]
@@ -117,6 +119,8 @@ model User {
   channelMessages    ChannelMessage[]
   dmChannelsAsLow    Channel[] @relation("ChannelDmLow")
   dmChannelsAsHigh   Channel[] @relation("ChannelDmHigh")
+  calendars          CalendarCollection[] @relation("CalendarOwner")
+  calendarEntries    CalendarEntry[] @relation("CalendarEntryCreator")
   passwordResetTokens PasswordResetToken[]
 
   @@unique([email, companyId])
@@ -157,6 +161,60 @@ model UserReminder {
   @@index([companyId, userId])
   @@index([userId, remindAt])
   @@map("user_reminders")
+}
+
+model CalendarCollection {
+  id          String       @id @default(cuid())
+  companyId   String
+  ownerUserId String?
+  name        String
+  color       String       @default("#22c55e")
+  type        CalendarType @default(PERSONAL)
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner   User?   @relation("CalendarOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  entries CalendarEntry[]
+
+  @@index([companyId, type, isArchived])
+  @@index([ownerUserId, isArchived])
+  @@map("calendar_collections")
+}
+
+model CalendarEntry {
+  id          String            @id @default(cuid())
+  companyId   String
+  calendarId  String
+  creatorId   String
+  title       String
+  notes       String?
+  kind        CalendarEntryKind @default(GOAL)
+  color       String            @default("#22c55e")
+  startAt     DateTime
+  endAt       DateTime?
+  isDone      Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  calendar CalendarCollection @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  creator  User               @relation("CalendarEntryCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, startAt])
+  @@index([calendarId, startAt])
+  @@map("calendar_entries")
+}
+
+enum CalendarType {
+  ORG
+  PERSONAL
+}
+
+enum CalendarEntryKind {
+  GOAL
+  MILESTONE
 }
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────

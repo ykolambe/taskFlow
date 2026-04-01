@@ -95,18 +95,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const allUsers2 = await prisma.user.findMany({
-      where: { companyId: company.id, isTenantBootstrapAccount: false },
-      select: { id: true, parentId: true },
+      where: { companyId: company.id, isTenantBootstrapAccount: false, isActive: true },
+      select: { id: true, parentId: true, roleLevel: { select: { level: true } } },
     });
     const getSubtreeIds2 = (userId: string): string[] => {
       const children = allUsers2.filter((u) => u.parentId === userId).map((u) => u.id);
       return [userId, ...children.flatMap((id) => getSubtreeIds2(id))];
     };
     const visibleIds = getSubtreeIds2(user.userId);
+    const currentLevel = allUsers2.find((u) => u.id === user.userId)?.roleLevel?.level ?? user.level ?? 0;
+    const sameLevelIds = allUsers2
+      .filter((u) => (u.roleLevel?.level ?? Number.NaN) === currentLevel)
+      .map((u) => u.id);
+    const assignableIds = new Set([...visibleIds, ...sameLevelIds]);
 
     const finalAssigneeId = assigneeId || user.userId;
-    if (!visibleIds.includes(finalAssigneeId)) {
-      return NextResponse.json({ error: "You can only assign tasks to yourself or people below you" }, { status: 403 });
+    if (!assignableIds.has(finalAssigneeId)) {
+      return NextResponse.json({ error: "You can only assign tasks to yourself, same-level peers, or people below you" }, { status: 403 });
     }
 
     const dueDateObj = dueDate ? parseDueDateInput(String(dueDate)) : null;

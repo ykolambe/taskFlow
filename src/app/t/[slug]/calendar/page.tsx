@@ -66,6 +66,37 @@ export default async function CalendarPage({
     },
   });
 
+  // Ensure there is always one org calendar.
+  await prisma.calendarCollection.upsert({
+    where: { id: `${company.id}-org` },
+    update: {},
+    create: {
+      id: `${company.id}-org`,
+      companyId: company.id,
+      ownerUserId: null,
+      name: "Org Calendar",
+      color: "#22c55e",
+      type: "ORG",
+    },
+  });
+
+  const calendars = await prisma.calendarCollection.findMany({
+    where: {
+      companyId: company.id,
+      isArchived: false,
+      OR: [{ type: "ORG" }, { ownerUserId: user.userId }],
+    },
+    orderBy: [{ type: "asc" }, { createdAt: "asc" }],
+  });
+
+  const calendarEntries = await prisma.calendarEntry.findMany({
+    where: {
+      companyId: company.id,
+      calendarId: { in: calendars.map((c) => c.id) },
+    },
+    orderBy: { startAt: "asc" },
+  });
+
   const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
   return (
@@ -81,6 +112,8 @@ export default async function CalendarPage({
         user={user}
         tasks={tasks as any}
         recurringTasks={recurringTasks as any}
+        calendars={calendars as any}
+        calendarEntries={calendarEntries as any}
         slug={slug}
       />
     </TenantLayout>
