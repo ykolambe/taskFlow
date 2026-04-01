@@ -45,6 +45,8 @@ export default async function ProfileServerPage({
           avatarUrl: dbUser.avatarUrl,
           bio: dbUser.bio,
           phone: dbUser.phone,
+          uiTheme: dbUser.uiTheme,
+          uiFontScale: dbUser.uiFontScale,
           roleLevel: dbUser.roleLevel
             ? {
                 name: dbUser.roleLevel.name,

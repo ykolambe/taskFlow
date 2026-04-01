@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany } from "@/lib/reportingLinks";
 import { getSubtreeIds, getDirectReportIds, buildTeamWorkloadRows } from "@/lib/subtreeWorkload";
 
 /**
@@ -24,18 +25,20 @@ export async function GET(
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
-  const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
-    include: { roleLevel: true },
-  });
+  const [allUsers, lr] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
+      include: { roleLevel: true },
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
 
-  const refs = allUsers.map((u) => ({ id: u.id, parentId: u.parentId }));
-  const viewerSubtree = new Set(getSubtreeIds(refs, viewer.userId));
+  const viewerSubtree = new Set(getSubtreeIds(lr, viewer.userId));
   if (!viewerSubtree.has(rootUserId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const directIds = getDirectReportIds(refs, rootUserId);
+  const directIds = getDirectReportIds(lr, rootUserId);
 
   const [statusConfigs, workloadTasks] = await Promise.all([
     prisma.taskStatusConfig.findMany({ where: { companyId: company.id } }),

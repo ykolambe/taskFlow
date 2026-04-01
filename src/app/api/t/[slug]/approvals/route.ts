@@ -3,6 +3,7 @@ import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getNextRequiredApprover } from "@/lib/approvalChain";
 import { validateTeamMemberRemoval } from "@/lib/teamMemberRemoval";
+import { getPrimaryManagerId, linksFromDb } from "@/lib/reportingLinks";
 
 export { getNextRequiredApprover };
 
@@ -11,30 +12,28 @@ const REQUESTER_SELECT = {
   avatarUrl: true, roleLevelId: true, roleLevel: true, isSuperAdmin: true,
 };
 
-/** Walk up parentId chain and return ordered array [directParent, ..., root]. Skips tenant bootstrap accounts. */
-async function buildApproverChain(userId: string): Promise<string[]> {
+/** Walk up primary-manager chain: [directParent, ..., root]. Skips tenant bootstrap accounts. */
+async function buildApproverChain(userId: string, companyId: string): Promise<string[]> {
+  const links = await prisma.userReportingLink.findMany({
+    where: { companyId },
+    select: { subordinateId: true, managerId: true, sortOrder: true },
+  });
+  const lr = linksFromDb(links);
   const chain: string[] = [];
-  let currentId: string | null = userId;
-
-  while (currentId) {
-    const record: { parentId: string | null } | null = await prisma.user.findUnique({
-      where: { id: currentId },
-      select: { parentId: true },
-    });
-    if (!record?.parentId) break;
-
+  let currentId = userId;
+  for (let i = 0; i < 200; i++) {
+    const primary = getPrimaryManagerId(lr, currentId);
+    if (!primary) break;
     const parentRow = await prisma.user.findUnique({
-      where: { id: record.parentId },
+      where: { id: primary },
       select: { isTenantBootstrapAccount: true },
     });
     if (!parentRow) break;
-
     if (!parentRow.isTenantBootstrapAccount) {
-      chain.push(record.parentId);
+      chain.push(primary);
     }
-    currentId = record.parentId;
+    currentId = primary;
   }
-
   return chain;
 }
 
@@ -140,7 +139,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         ? company.roleLevels.find((r) => r.id === target.roleLevelId)?.name ?? "—"
         : "—";
 
-      const approverChain = await buildApproverChain(user.userId);
+      const approverChain = await buildApproverChain(user.userId, company.id);
 
       const request = await prisma.approvalRequest.create({
         data: {
@@ -174,7 +173,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const roleLevel = company.roleLevels.find((r) => r.id === newUserData.roleLevelId);
     if (!roleLevel) return NextResponse.json({ error: "Invalid role level" }, { status: 400 });
 
-    const approverChain = await buildApproverChain(user.userId);
+    const approverChain = await buildApproverChain(user.userId, company.id);
 
     const request = await prisma.approvalRequest.create({
       data: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, avatarUrl: true,
@@ -42,15 +43,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const rawSkip = parseInt(searchParams.get("skip") ?? "0", 10);
   const skip = Number.isFinite(rawSkip) && rawSkip > 0 ? rawSkip : 0;
 
-  const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isTenantBootstrapAccount: false },
-    select: { id: true, parentId: true },
-  });
-  const getSubtreeIds = (userId: string): string[] => {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
-  };
-  const visibleIds = getSubtreeIds(user.userId);
+  const lr = await fetchReportingLinksForCompany(prisma, company.id);
+  const visibleIds = getPrimarySubtreeIds(lr, user.userId);
 
   const assigneeFilter = mineOnly ? user.userId : { in: visibleIds };
   const orderBy = mineOnly
@@ -94,15 +88,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const company = await prisma.company.findUnique({ where: { slug } });
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const allUsers2 = await prisma.user.findMany({
-      where: { companyId: company.id, isTenantBootstrapAccount: false, isActive: true },
-      select: { id: true, parentId: true, roleLevel: { select: { level: true } } },
-    });
-    const getSubtreeIds2 = (userId: string): string[] => {
-      const children = allUsers2.filter((u) => u.parentId === userId).map((u) => u.id);
-      return [userId, ...children.flatMap((id) => getSubtreeIds2(id))];
-    };
-    const visibleIds = getSubtreeIds2(user.userId);
+    const [allUsers2, lr2] = await Promise.all([
+      prisma.user.findMany({
+        where: { companyId: company.id, isTenantBootstrapAccount: false, isActive: true },
+        select: { id: true, roleLevel: { select: { level: true } } },
+      }),
+      fetchReportingLinksForCompany(prisma, company.id),
+    ]);
+    const visibleIds = getPrimarySubtreeIds(lr2, user.userId);
     const currentLevel = allUsers2.find((u) => u.id === user.userId)?.roleLevel?.level ?? user.level ?? 0;
     const sameLevelIds = allUsers2
       .filter((u) => (u.roleLevel?.level ?? Number.NaN) === currentLevel)

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { UiFontScale, UiTheme } from "@prisma/client";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+
+const UI_THEMES: UiTheme[] = ["LIGHT", "DARK"];
+const UI_FONT_SCALES: UiFontScale[] = ["SMALL", "MEDIUM", "LARGE", "XL"];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -18,7 +22,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { currentPassword, newPassword, firstName, lastName, avatarUrl, bio, phone } = await req.json();
+    const body = await req.json();
+    const {
+      currentPassword,
+      newPassword,
+      firstName,
+      lastName,
+      avatarUrl,
+      bio,
+      phone,
+      uiTheme,
+      uiFontScale,
+    } = body as {
+      currentPassword?: string;
+      newPassword?: string;
+      firstName?: string;
+      lastName?: string;
+      avatarUrl?: string | null;
+      bio?: string;
+      phone?: string;
+      uiTheme?: string;
+      uiFontScale?: string;
+    };
 
     const existing = await prisma.user.findUnique({ where: { id: user.userId } });
     if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -32,6 +57,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       return NextResponse.json({ success: true, message: "Password updated" });
     }
 
+    let nextTheme: UiTheme | undefined;
+    if (uiTheme !== undefined) {
+      if (!UI_THEMES.includes(uiTheme as UiTheme)) {
+        return NextResponse.json({ error: "Invalid uiTheme" }, { status: 400 });
+      }
+      nextTheme = uiTheme as UiTheme;
+    }
+    let nextFont: UiFontScale | undefined;
+    if (uiFontScale !== undefined) {
+      if (!UI_FONT_SCALES.includes(uiFontScale as UiFontScale)) {
+        return NextResponse.json({ error: "Invalid uiFontScale" }, { status: 400 });
+      }
+      nextFont = uiFontScale as UiFontScale;
+    }
+
     const updated = await prisma.user.update({
       where: { id: user.userId },
       data: {
@@ -40,6 +80,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
         ...(avatarUrl !== undefined && { avatarUrl }),
         ...(bio !== undefined && { bio: bio || null }),
         ...(phone !== undefined && { phone: phone || null }),
+        ...(nextTheme !== undefined && { uiTheme: nextTheme }),
+        ...(nextFont !== undefined && { uiFontScale: nextFont }),
       },
       include: { roleLevel: true },
     });

@@ -2,7 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light theme (html without .dark) — surfaces: high index = UI chrome/bg, low index = text */
 :root {
+  color-scheme: light;
+  --surf-50: 15 23 42;
+  --surf-100: 30 41 59;
+  --surf-200: 51 65 85;
+  --surf-300: 71 85 105;
+  --surf-400: 100 116 139;
+  --surf-500: 100 116 139;
+  --surf-600: 148 163 184;
+  --surf-700: 203 213 225;
+  --surf-750: 226 232 240;
+  --surf-800: 241 245 249;
+  --surf-850: 244 247 252;
+  --surf-900: 255 255 255;
+  --surf-950: 248 250 252;
+
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --primary: #7c3aed;
+}
+
+.dark {
+  color-scheme: dark;
+  --surf-50: 250 250 252;
+  --surf-100: 242 243 247;
+  --surf-200: 230 232 239;
+  --surf-300: 207 212 223;
+  --surf-400: 157 166 184;
+  --surf-500: 105 116 136;
+  --surf-600: 75 86 107;
+  --surf-700: 50 58 74;
+  --surf-750: 38 45 58;
+  --surf-800: 27 33 48;
+  --surf-850: 22 27 41;
+  --surf-900: 16 21 34;
+  --surf-950: 9 13 23;
+
   --bg: #090d17;
   --surface: #1b2130;
   --border: #323a4a;
@@ -13,10 +52,15 @@
 * { box-sizing: border-box; padding: 0; margin: 0; }
 html { scroll-behavior: smooth; }
 
+html[data-font-scale="small"] { font-size: 14px; }
+html[data-font-scale="medium"] { font-size: 16px; }
+html[data-font-scale="large"] { font-size: 18px; }
+html[data-font-scale="xl"] { font-size: 20px; }
+
 body {
   font-family: var(--font-manrope), system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  background: rgb(var(--surf-950));
+  color: rgb(var(--surf-100));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   background-image:
@@ -24,17 +68,29 @@ body {
     radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.08), transparent 30%);
 }
 
+html:not(.dark) body {
+  background-image:
+    radial-gradient(circle at 10% 5%, rgba(139, 92, 246, 0.08), transparent 30%),
+    radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.05), transparent 28%);
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at 10% 5%, rgba(139, 92, 246, 0.12), transparent 35%),
+    radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.08), transparent 30%);
+}
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #101522; }
-::-webkit-scrollbar-thumb { background: #4b566b; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #697488; }
+::-webkit-scrollbar-track { background: rgb(var(--surf-900)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--surf-600)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--surf-500)); }
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0px 1000px #101522 inset;
-  -webkit-text-fill-color: #f2f3f7;
-  caret-color: #f2f3f7;
+  -webkit-box-shadow: 0 0 0px 1000px rgb(var(--surf-900)) inset;
+  -webkit-text-fill-color: rgb(var(--surf-100));
+  caret-color: rgb(var(--surf-100));
 }
 
 @layer components {
@@ -64,7 +120,7 @@ input:-webkit-autofill:focus {
   position: absolute;
   top: 0;
   left: 50%;
-  border-left: 2px solid #334155;
+  border-left: 2px solid rgb(var(--surf-700));
   height: 20px;
 }
 .org-tree li {
@@ -80,14 +136,14 @@ input:-webkit-autofill:focus {
   position: absolute;
   top: 0;
   right: 50%;
-  border-top: 2px solid #334155;
+  border-top: 2px solid rgb(var(--surf-700));
   width: 50%;
   height: 20px;
 }
 .org-tree li::after {
   right: auto;
   left: 50%;
-  border-left: 2px solid #334155;
+  border-left: 2px solid rgb(var(--surf-700));
 }
 .org-tree li:only-child::after,
 .org-tree li:only-child::before { display: none; }
@@ -95,7 +151,7 @@ input:-webkit-autofill:focus {
 .org-tree li:first-child::before,
 .org-tree li:last-child::after { border: 0 none; }
 .org-tree li:last-child::before {
-  border-right: 2px solid #334155;
+  border-right: 2px solid rgb(var(--surf-700));
   border-radius: 0 5px 0 0;
 }
 .org-tree li:first-child::after { border-radius: 5px 0 0 0; }

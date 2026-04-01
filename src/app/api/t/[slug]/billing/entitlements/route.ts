@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { countUsersWithEffectiveAi } from "@/lib/ai/entitlement";
 import {
   countActiveSeats,
   effectiveSeatLimit,
@@ -35,9 +36,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const chatAddon = Boolean(billing?.chatAddonEnabled);
   const recAddon = Boolean(billing?.recurringAddonEnabled);
+  const aiAddon = Boolean(billing?.aiAddonEnabled);
   // Company may enable add-ons via billing only; modules array is kept in sync in most flows but can drift.
   const showChatNav = paidOk && (chatAddon || company.modules.includes("chat"));
   const showRecurringNav = paidOk && (recAddon || company.modules.includes("recurring"));
+  const aiSeatsUsed =
+    aiAddon && paidOk ? await countUsersWithEffectiveAi(company.id) : 0;
 
   return NextResponse.json({
     plan,
@@ -51,5 +55,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     isSuperAdmin: user.isSuperAdmin,
     showChatNav,
     showRecurringNav,
+    aiSeatsUsed,
   });
 }

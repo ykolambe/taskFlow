@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Settings, Plus, Trash2, Save, Key, Copy, User, ListChecks, GripVertical, Upload, MessageCircle } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Settings, Plus, Trash2, Save, Key, Copy, User, ListChecks, GripVertical, Upload, MessageCircle, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { TenantTokenPayload } from "@/lib/auth";
@@ -17,6 +17,7 @@ interface Company {
   logoUrl: string | null;
   modules: string[];
   roleLevels: RoleLevel[];
+  hierarchyTiers?: { level: number; defaultAiAddon: boolean }[];
 }
 
 interface StatusConfig {
@@ -58,7 +59,24 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
   const [savingBranding, setSavingBranding] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [roleLevels, setRoleLevels] = useState(company.roleLevels);
+  const [tierAiByLevel, setTierAiByLevel] = useState<Record<number, boolean>>(() => {
+    const o: Record<number, boolean> = {};
+    for (const t of company.hierarchyTiers ?? []) o[t.level] = t.defaultAiAddon;
+    return o;
+  });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const o: Record<number, boolean> = {};
+    for (const t of company.hierarchyTiers ?? []) o[t.level] = t.defaultAiAddon;
+    setTierAiByLevel(o);
+  }, [company.hierarchyTiers]);
+
+  const distinctHierarchyLevels = useMemo(
+    () =>
+      [...new Set(roleLevels.map((l) => Math.min(999, Math.max(1, Number(l.level) || 1))))].sort((a, b) => a - b),
+    [roleLevels]
+  );
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -131,26 +149,41 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
   };
 
   const addLevel = () => {
-    const nextLevel = roleLevels.length + 1;
-    setRoleLevels([...roleLevels, { id: "", name: `Level ${nextLevel}`, level: nextLevel, color: COLORS[nextLevel % COLORS.length], companyId: company.id, canApprove: true }]);
+    const maxLv = roleLevels.reduce((m, l) => Math.max(m, Number(l.level) || 1), 0);
+    const next = maxLv + 1;
+    setRoleLevels([
+      ...roleLevels,
+      {
+        id: "",
+        name: `Role ${roleLevels.length + 1}`,
+        level: next,
+        color: COLORS[next % COLORS.length],
+        companyId: company.id,
+        canApprove: true,
+      },
+    ]);
   };
 
   const removeLevel = (index: number) => {
     if (roleLevels.length <= 1) return;
-    setRoleLevels(roleLevels.filter((_, i) => i !== index).map((l, i) => ({ ...l, level: i + 1 })));
+    setRoleLevels(roleLevels.filter((_, i) => i !== index));
   };
 
-  const updateLevel = (index: number, field: string, value: string | boolean) => {
+  const updateLevel = (index: number, field: string, value: string | boolean | number) => {
     setRoleLevels(roleLevels.map((l, i) => (i === index ? { ...l, [field]: value } : l)));
   };
 
   const handleSaveRoles = async () => {
     setSaving(true);
     try {
+      const hierarchyTiers = distinctHierarchyLevels.map((lv) => ({
+        level: lv,
+        defaultAiAddon: tierAiByLevel[lv] ?? false,
+      }));
       const res = await fetch(`/api/t/${slug}/org`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roleLevels }),
+        body: JSON.stringify({ roleLevels, hierarchyTiers }),
       });
       if (res.ok) {
         toast.success("Role levels updated!");
@@ -622,17 +655,32 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
             <Plus className="w-3.5 h-3.5" /> Add Level
           </button>
         </div>
-        <p className="text-xs text-surface-500 mb-3">Level 1 is the top of the hierarchy. People at lower levels report to higher ones.</p>
+        <p className="text-xs text-surface-500 mb-3">
+          Lower numbers are higher in the org (e.g. 1 = top). Multiple roles can share the same number — e.g. CEO and CTO both at level 2,
+          with managers at level 3.
+        </p>
 
         <div className="space-y-2 mb-4">
           {roleLevels.map((level, index) => (
-            <div key={index} className="flex items-center gap-3 p-3 bg-surface-750 rounded-xl border border-surface-700">
+            <div key={index} className="flex items-center gap-2 sm:gap-3 p-3 bg-surface-750 rounded-xl border border-surface-700 flex-wrap">
               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: level.color }} />
-              <span className="text-xs text-surface-500 w-4 font-mono">{level.level}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-surface-500 uppercase tracking-wide">Tier</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={level.level}
+                  onChange={(e) =>
+                    updateLevel(index, "level", Math.min(999, Math.max(1, parseInt(e.target.value, 10) || 1)))
+                  }
+                  className="w-14 shrink-0 bg-surface-900/80 border border-surface-700 rounded-lg px-1.5 py-1 text-xs text-surface-100 text-center"
+                />
+              </div>
               <input
                 value={level.name}
                 onChange={(e) => updateLevel(index, "name", e.target.value)}
-                className="flex-1 bg-transparent text-sm text-surface-100 focus:outline-none"
+                className="flex-1 min-w-[120px] bg-transparent text-sm text-surface-100 focus:outline-none"
               />
               <div className="flex items-center gap-2">
                 <label className="text-[10px] text-surface-500 flex items-center gap-1 cursor-pointer">
@@ -654,6 +702,32 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
             </div>
           ))}
         </div>
+
+        {distinctHierarchyLevels.length > 0 && (
+          <div className="mb-4 rounded-xl border border-primary-500/20 bg-primary-500/5 px-3 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-primary-400" />
+              <p className="text-xs font-semibold text-surface-200">AI add-on by hierarchy tier</p>
+            </div>
+            <p className="text-[11px] text-surface-500 leading-relaxed">
+              When your plan includes the AI add-on, enabling a tier here gives every active member at that tier access by default.
+              It counts toward AI usage. Individual users can still be toggled on the Team page.
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {distinctHierarchyLevels.map((lv) => (
+                <label key={lv} className="inline-flex items-center gap-2 text-xs text-surface-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-surface-600"
+                    checked={tierAiByLevel[lv] ?? false}
+                    onChange={() => setTierAiByLevel((p) => ({ ...p, [lv]: !p[lv] }))}
+                  />
+                  Tier {lv}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <Button onClick={handleSaveRoles} loading={saving} size="sm">
           <Save className="w-3.5 h-3.5" /> Save Hierarchy

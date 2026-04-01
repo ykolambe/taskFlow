@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import type { UiFontScale, UiTheme } from "@prisma/client";
 import { hydrateTenantPrisma, prisma, setTenantDbContext } from "@/lib/prisma";
 import { getJwtExpirationDurationString } from "@/lib/sessionDuration";
 
@@ -47,7 +48,7 @@ export async function signToken(payload: TokenPayload): Promise<string> {
 }
 
 export async function verifyToken(token: string): Promise<TokenPayload> {
-  const { payload } = await jwtVerify(token, getSecret());
+  const { payload } = await jwtVerify(token, getSecret(), { clockTolerance: 120 });
   return payload as unknown as TokenPayload;
 }
 
@@ -100,7 +101,14 @@ export async function getTenantUser(
  */
 export async function getTenantUserFresh(
   slug: string
-): Promise<(TenantTokenPayload & { avatarUrl: string | null }) | null> {
+): Promise<
+  | (TenantTokenPayload & {
+      avatarUrl: string | null;
+      uiTheme: UiTheme;
+      uiFontScale: UiFontScale;
+    })
+  | null
+> {
   const token = await getTenantUser(slug);
   if (!token) return null;
 
@@ -116,6 +124,8 @@ export async function getTenantUserFresh(
         chatAddonAccess: true,
         recurringAddonAccess: true,
         aiAddonAccess: true,
+        uiTheme: true,
+        uiFontScale: true,
       },
     });
     if (!dbUser) return null;
@@ -130,8 +140,15 @@ export async function getTenantUserFresh(
       chatAddonAccess: dbUser.chatAddonAccess,
       recurringAddonAccess: dbUser.recurringAddonAccess,
       aiAddonAccess: dbUser.aiAddonAccess,
+      uiTheme: dbUser.uiTheme,
+      uiFontScale: dbUser.uiFontScale,
     };
   } catch {
-    return token as TenantTokenPayload & { avatarUrl: string | null };
+    return {
+      ...token,
+      avatarUrl: null,
+      uiTheme: "DARK" as UiTheme,
+      uiFontScale: "MEDIUM" as UiFontScale,
+    };
   }
 }

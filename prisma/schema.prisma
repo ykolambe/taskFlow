@@ -50,8 +50,22 @@ model Company {
   infraConfig      TenantInfraConfig?
   provisioningJobs TenantProvisioningJob[]
   aiUsageLogs      TenantAiUsageLog[]
+  userReportingLinks UserReportingLink[]
+  hierarchyTiers   CompanyHierarchyTier[]
 
   @@map("companies")
+}
+
+enum UiTheme {
+  LIGHT
+  DARK
+}
+
+enum UiFontScale {
+  SMALL
+  MEDIUM
+  LARGE
+  XL
 }
 
 // ─── Role Levels (Hierarchy) ────────────────────────────────────────────────
@@ -68,9 +82,23 @@ model RoleLevel {
   users   User[]
   channels Channel[]
 
-  @@unique([companyId, level])
   @@unique([companyId, name])
+  @@index([companyId, level])
   @@map("role_levels")
+}
+
+/// Per numeric hierarchy tier (multiple named roles may share the same level, e.g. CEO + CTO at level 2).
+model CompanyHierarchyTier {
+  id               String  @id @default(cuid())
+  companyId        String
+  level            Int
+  /// When true, all users whose role is assigned this hierarchy level get AI add-on access (if company billing includes AI).
+  defaultAiAddon   Boolean @default(false)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, level])
+  @@map("company_hierarchy_tiers")
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -79,7 +107,6 @@ model User {
   id           String   @id @default(cuid())
   companyId    String
   roleLevelId  String?
-  parentId     String?
   email        String
   username     String
   passwordHash String
@@ -93,17 +120,20 @@ model User {
   isTenantBootstrapAccount Boolean @default(false)
   aiLeaderQaEnabled Boolean @default(false)
   /// Per-user grant when company has purchased the chat add-on (Pro).
-  chatAddonAccess     Boolean @default(false)
-  recurringAddonAccess Boolean @default(false)
+  chatAddonAccess     Boolean @default(true)
+  recurringAddonAccess Boolean @default(true)
   aiAddonAccess       Boolean @default(false)
   isActive     Boolean  @default(true)
+  uiTheme      UiTheme    @default(DARK)
+  uiFontScale  UiFontScale @default(MEDIUM)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   roleLevel RoleLevel? @relation(fields: [roleLevelId], references: [id])
-  parent    User?     @relation("UserHierarchy", fields: [parentId], references: [id])
-  children  User[]    @relation("UserHierarchy")
+  /// People this user reports to (multiple allowed). sortOrder 0 = primary (org chart + approval chain).
+  reportingLinksAsSubordinate UserReportingLink[] @relation("ReportingSubordinate")
+  reportingLinksAsManager     UserReportingLink[] @relation("ReportingManager")
 
   createdTasks       Task[]            @relation("TaskCreator")
   assignedTasks      Task[]            @relation("TaskAssignee")
@@ -126,6 +156,26 @@ model User {
   @@unique([email, companyId])
   @@unique([username, companyId])
   @@map("users")
+}
+
+/// Many-to-many: a subordinate can report to multiple managers. sortOrder 0 = primary.
+model UserReportingLink {
+  id            String   @id @default(cuid())
+  companyId     String
+  subordinateId String
+  managerId     String
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subordinate User    @relation("ReportingSubordinate", fields: [subordinateId], references: [id], onDelete: Cascade)
+  manager     User    @relation("ReportingManager", fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([subordinateId, managerId])
+  @@index([companyId, managerId])
+  @@index([companyId, subordinateId])
+  @@map("user_reporting_links")
 }
 
 model PasswordResetToken {

@@ -13,12 +13,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const users = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
-    include: { roleLevel: true },
-    orderBy: [{ firstName: "asc" }],
-  });
-  // Sort: super admins (no roleLevel) first, then by level asc, then by name
+  const [users, reportingLinks] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
+      include: {
+        roleLevel: true,
+        reportingLinksAsSubordinate: { select: { managerId: true, sortOrder: true } },
+      },
+      orderBy: [{ firstName: "asc" }],
+    }),
+    prisma.userReportingLink.findMany({
+      where: { companyId: company.id },
+      select: { subordinateId: true, managerId: true, sortOrder: true },
+    }),
+  ]);
   users.sort((a, b) => {
     const la = a.roleLevel?.level ?? -1;
     const lb = b.roleLevel?.level ?? -1;
@@ -26,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     return a.firstName.localeCompare(b.firstName);
   });
 
-  return NextResponse.json({ success: true, data: users });
+  return NextResponse.json({ success: true, data: users, reportingLinks });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -39,7 +47,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   try {
-    const { firstName, lastName, email, username, roleLevelId, parentId } = await req.json();
+    const body = await req.json();
+    const { firstName, lastName, email, username, roleLevelId } = body;
+    const managerIds: string[] = Array.isArray(body.managerIds)
+      ? body.managerIds.filter((x: unknown) => typeof x === "string")
+      : typeof body.parentId === "string" && body.parentId
+        ? [body.parentId]
+        : [];
 
     if (!firstName || !lastName || !email || !roleLevelId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -59,18 +73,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const password = generatePassword(12);
     const finalUsername = username || `${firstName.toLowerCase()}${Math.floor(Math.random() * 1000)}`;
 
-    const newUser = await prisma.user.create({
-      data: {
-        companyId: company.id,
-        roleLevelId,
-        parentId: parentId || null,
-        email: email.toLowerCase(),
-        username: finalUsername,
-        passwordHash: await bcrypt.hash(password, 12),
-        firstName,
-        lastName,
-      },
-      include: { roleLevel: true },
+    const newUser = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          companyId: company.id,
+          roleLevelId,
+          email: email.toLowerCase(),
+          username: finalUsername,
+          passwordHash: await bcrypt.hash(password, 12),
+          firstName,
+          lastName,
+        },
+        include: { roleLevel: true },
+      });
+      for (let i = 0; i < managerIds.length; i++) {
+        await tx.userReportingLink.create({
+          data: {
+            companyId: company.id,
+            subordinateId: u.id,
+            managerId: managerIds[i],
+            sortOrder: i,
+          },
+        });
+      }
+      return u;
     });
 
     return NextResponse.json({

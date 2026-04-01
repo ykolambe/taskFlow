@@ -21,6 +21,8 @@ interface Props {
   currentUser: TenantTokenPayload;
   users: User[];
   roleLevels: RoleLevel[];
+  /** Tier-level AI defaults from Settings (same hierarchy number can apply to multiple role names). */
+  hierarchyTiers?: { level: number; defaultAiAddon: boolean }[];
   slug: string;
   companyId: string;
   /** Company has purchased these add-ons (Pro); super admin assigns per user below */
@@ -28,10 +30,27 @@ interface Props {
   workloadRows?: TeamWorkloadRow[];
 }
 
+function tierGrantsAi(
+  u: User,
+  tiers: { level: number; defaultAiAddon: boolean }[]
+): boolean {
+  const lv = u.roleLevel?.level;
+  if (lv == null) return false;
+  return tiers.some((t) => t.level === lv && t.defaultAiAddon);
+}
+
+function effectiveAiAccess(
+  u: User,
+  tiers: { level: number; defaultAiAddon: boolean }[]
+): boolean {
+  return Boolean(u.aiAddonAccess) || tierGrantsAi(u, tiers);
+}
+
 export default function TeamPage({
   currentUser,
   users,
   roleLevels,
+  hierarchyTiers = [],
   slug,
   companyId,
   billingAddons = { chat: false, recurring: false, ai: false },
@@ -100,14 +119,23 @@ export default function TeamPage({
     [roleLevels]
   );
 
+  function primaryManagerId(u: User): string | null {
+    const rel = u.reportingLinksAsSubordinate;
+    if (!rel?.length) return null;
+    const sorted = [...rel].sort((a, b) => a.sortOrder - b.sortOrder || a.managerId.localeCompare(b.managerId));
+    return sorted[0].managerId;
+  }
+
   const isUnderMyReportingLine = (target: User): boolean => {
-    let cur: string | undefined = target.parentId ?? undefined;
+    let cur: string | null = primaryManagerId(target);
     const seen = new Set<string>();
     while (cur) {
+      if (cur === currentUser.userId) return true;
       if (seen.has(cur)) return false;
       seen.add(cur);
-      if (cur === currentUser.userId) return true;
-      cur = userById.get(cur)?.parentId ?? undefined;
+      const u = userById.get(cur);
+      if (!u) return false;
+      cur = primaryManagerId(u);
     }
     return false;
   };
@@ -153,7 +181,7 @@ export default function TeamPage({
     try {
       const newUserPayload = {
         ...newMember,
-        parentId: newMember.parentId || null,
+        managerIds: newMember.parentId ? [newMember.parentId] : [],
       };
       if (needsApproval) {
         // Send approval request
@@ -552,7 +580,7 @@ export default function TeamPage({
               </div>
               <div className="bg-surface-750 rounded-xl p-3">
                 <p className="text-surface-500">Direct Reports</p>
-                <p className="text-2xl font-bold text-surface-100 mt-0.5">{selectedUser._count?.children ?? 0}</p>
+                <p className="text-2xl font-bold text-surface-100 mt-0.5">{selectedUser._count?.reportingLinksAsManager ?? 0}</p>
               </div>
             </div>
 
@@ -681,20 +709,35 @@ export default function TeamPage({
                       </label>
                     )}
                     {billingAddons.ai && (
-                      <label className="flex items-center justify-between gap-2 text-sm text-surface-200 cursor-pointer">
-                        <span>AI (Executive Brief &amp; tools)</span>
+                      <label
+                        className={cn(
+                          "flex items-center justify-between gap-2 text-sm text-surface-200",
+                          tierGrantsAi(selectedUser, hierarchyTiers) ? "cursor-default" : "cursor-pointer"
+                        )}
+                        title={
+                          tierGrantsAi(selectedUser, hierarchyTiers)
+                            ? "Enabled for this member via Settings → hierarchy tier. Turn off the tier there to revoke."
+                            : undefined
+                        }
+                      >
+                        <span className="flex flex-col gap-0.5">
+                          <span>AI (Executive Brief &amp; tools)</span>
+                          {tierGrantsAi(selectedUser, hierarchyTiers) && (
+                            <span className="text-[10px] text-surface-500 font-normal">Tier default</span>
+                          )}
+                        </span>
                         <input
                           type="checkbox"
                           className="rounded border-surface-600"
-                          checked={selectedUser.aiAddonAccess ?? false}
-                          disabled={addonSaving}
+                          checked={effectiveAiAccess(selectedUser, hierarchyTiers)}
+                          disabled={addonSaving || tierGrantsAi(selectedUser, hierarchyTiers)}
                           onChange={(e) => void patchUserAddon(selectedUser, "aiAddonAccess", e.target.checked)}
                         />
                       </label>
                     )}
                   </div>
                 )}
-                {billingAddons.ai && (selectedUser.aiAddonAccess ?? false) && (
+                {billingAddons.ai && effectiveAiAccess(selectedUser, hierarchyTiers) && (
                   <Button
                     size="sm"
                     variant="secondary"

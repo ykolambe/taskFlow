@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 import { Suspense } from "react";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TasksBoard from "@/components/tenant/TasksBoard";
@@ -28,23 +29,20 @@ export default async function TasksPage({
     orderBy: { order: "asc" },
   });
 
-  // Get all users the current user can see
-  const allUsers = await prisma.user.findMany({
-    where: {
-      companyId: company.id,
-      isActive: true,
-      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
-    },
-    include: { roleLevel: true },
-    orderBy: [{ roleLevel: { level: "asc" } }, { firstName: "asc" }],
-  });
+  const [allUsers, reportingLinks] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true,
+        OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+      },
+      include: { roleLevel: true },
+      orderBy: [{ roleLevel: { level: "asc" } }, { firstName: "asc" }],
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
 
-  function getSubtreeIds(userId: string): string[] {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
-  }
-
-  const visibleUserIds = getSubtreeIds(user.userId);
+  const visibleUserIds = getPrimarySubtreeIds(reportingLinks, user.userId);
 
   const tasks = await prisma.task.findMany({
     where: {

@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 import TenantLayout from "@/components/layout/TenantLayout";
 import RecurringTasksPage from "@/components/tenant/RecurringTasksPage";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
@@ -17,22 +18,19 @@ export default async function RecurringPage({
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company || !company.isActive) notFound();
 
-  // Visible subtree
-  const allUsers = await prisma.user.findMany({
-    where: {
-      companyId: company.id,
-      isActive: true,
-      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
-    },
-    include: { roleLevel: true },
-    orderBy: { firstName: "asc" },
-  });
-
-  function getSubtreeIds(userId: string): string[] {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
-  }
-  const visibleIds = getSubtreeIds(user.userId);
+  const [allUsers, reportingLinks] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true,
+        OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+      },
+      include: { roleLevel: true },
+      orderBy: { firstName: "asc" },
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
+  const visibleIds = getPrimarySubtreeIds(reportingLinks, user.userId);
 
   // Fetch recurring tasks visible to this user
   const recurring = await prisma.recurringTask.findMany({

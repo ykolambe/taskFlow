@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { getTenantUserFresh } from "@/lib/auth";
+import TenantThemeProvider from "@/components/layout/TenantThemeProvider";
 
 type Props = { children: React.ReactNode; params: Promise<{ slug: string }> };
 
@@ -10,7 +12,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// Pass-through layout — each page handles its own auth and layout
-export default function TenantRootLayout({ children }: Props) {
-  return <>{children}</>;
+export default async function TenantRootLayout({ children, params }: Props) {
+  const { slug } = await params;
+  const user = await getTenantUserFresh(slug);
+  const uiTheme = user?.uiTheme ?? "DARK";
+  const uiFontScale = user?.uiFontScale ?? "MEDIUM";
+
+  return (
+    <TenantThemeProvider uiTheme={uiTheme} uiFontScale={uiFontScale}>
+      {children}
+    </TenantThemeProvider>
+  );
 }

@@ -181,6 +181,7 @@ async function seedTenantDatabase(companyId: string, databaseUrl: string): Promi
         roleLevels: true,
         users: true,
         taskStatuses: true,
+        userReportingLinks: true,
       },
     });
     if (!source) {
@@ -242,7 +243,6 @@ async function seedTenantDatabase(companyId: string, databaseUrl: string): Promi
             id: u.id,
             companyId: u.companyId,
             roleLevelId: u.roleLevelId,
-            parentId: u.parentId,
             email: u.email,
             username: u.username,
             passwordHash: u.passwordHash,
@@ -255,6 +255,18 @@ async function seedTenantDatabase(companyId: string, databaseUrl: string): Promi
             isTenantBootstrapAccount: u.isTenantBootstrapAccount,
             aiLeaderQaEnabled: u.aiLeaderQaEnabled,
             isActive: u.isActive,
+          })),
+        });
+      }
+
+      if (source.userReportingLinks.length > 0) {
+        await tx.userReportingLink.createMany({
+          data: source.userReportingLinks.map((l) => ({
+            id: l.id,
+            companyId: l.companyId,
+            subordinateId: l.subordinateId,
+            managerId: l.managerId,
+            sortOrder: l.sortOrder,
           })),
         });
       }

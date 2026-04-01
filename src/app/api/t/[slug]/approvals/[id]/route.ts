@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { getNextRequiredApprover } from "@/lib/approvalChain";
 import { validateTeamMemberRemoval } from "@/lib/teamMemberRemoval";
 import { canAddSeat } from "@/lib/planEntitlements";
+import { getPrimaryManagerId, linksFromDb } from "@/lib/reportingLinks";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, email: true, username: true,
@@ -124,10 +125,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       }
 
       await prisma.$transaction(async (tx) => {
-        await tx.user.updateMany({
-          where: { companyId: company.id, parentId: target.id },
-          data: { parentId: target.parentId },
+        const allLinks = await tx.userReportingLink.findMany({
+          where: { companyId: company.id },
+          select: { subordinateId: true, managerId: true, sortOrder: true },
         });
+        const lr = linksFromDb(allLinks);
+        const primary = getPrimaryManagerId(lr, target.id);
+
+        const asManager = await tx.userReportingLink.findMany({ where: { managerId: target.id } });
+        for (const link of asManager) {
+          if (primary && primary !== link.subordinateId) {
+            const conflict = await tx.userReportingLink.findUnique({
+              where: {
+                subordinateId_managerId: {
+                  subordinateId: link.subordinateId,
+                  managerId: primary,
+                },
+              },
+            });
+            if (conflict) {
+              await tx.userReportingLink.delete({ where: { id: link.id } });
+            } else {
+              await tx.userReportingLink.update({
+                where: { id: link.id },
+                data: { managerId: primary },
+              });
+            }
+          } else {
+            await tx.userReportingLink.delete({ where: { id: link.id } });
+          }
+        }
+
+        await tx.userReportingLink.deleteMany({ where: { subordinateId: target.id } });
         await tx.user.update({
           where: { id: target.id },
           data: { isActive: false },
@@ -151,6 +180,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       username?: string;
       roleLevelId: string;
       parentId?: string;
+      managerIds?: string[];
     };
 
     const password = generatePassword(12);
@@ -171,20 +201,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
       return NextResponse.json({ error: seatCheck.reason }, { status: 403 });
     }
 
-    await prisma.user.create({
-      data: {
-        companyId: company.id,
-        roleLevelId: newUserData.roleLevelId,
-        parentId: newUserData.parentId || null,
-        email: newUserData.email.toLowerCase(),
-        username,
-        passwordHash: await bcrypt.hash(password, 12),
-        firstName: newUserData.firstName,
-        lastName: newUserData.lastName,
-      },
-    });
+    const managerIds: string[] =
+      Array.isArray(newUserData.managerIds) && newUserData.managerIds.length > 0
+        ? newUserData.managerIds.filter((x): x is string => typeof x === "string")
+        : newUserData.parentId
+          ? [newUserData.parentId]
+          : [];
 
-    await prisma.approvalRequest.update({ where: { id }, data: { status: "APPROVED" } });
+    await prisma.$transaction(async (tx) => {
+      const nu = await tx.user.create({
+        data: {
+          companyId: company.id,
+          roleLevelId: newUserData.roleLevelId,
+          email: newUserData.email.toLowerCase(),
+          username,
+          passwordHash: await bcrypt.hash(password, 12),
+          firstName: newUserData.firstName,
+          lastName: newUserData.lastName,
+        },
+      });
+      for (let i = 0; i < managerIds.length; i++) {
+        await tx.userReportingLink.create({
+          data: {
+            companyId: company.id,
+            subordinateId: nu.id,
+            managerId: managerIds[i],
+            sortOrder: i,
+          },
+        });
+      }
+      await tx.approvalRequest.update({ where: { id }, data: { status: "APPROVED" } });
+    });
 
     const updated = await prisma.approvalRequest.findUnique({
       where: { id },

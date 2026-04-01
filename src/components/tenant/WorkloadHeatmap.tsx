@@ -8,6 +8,17 @@ import type { TeamWorkloadRow } from "@/lib/subtreeWorkload";
 import type { User } from "@/types";
 import toast from "react-hot-toast";
 
+function primaryManagerId(u: User): string | null {
+  const rel = u.reportingLinksAsSubordinate;
+  if (!rel?.length) return null;
+  const sorted = [...rel].sort((a, b) => a.sortOrder - b.sortOrder || a.managerId.localeCompare(b.managerId));
+  return sorted[0].managerId;
+}
+
+function hasPrimaryDirectReport(users: User[], managerId: string): boolean {
+  return users.some((u) => primaryManagerId(u) === managerId);
+}
+
 function heatStyle(value: number, max: number, scheme: "active" | "overdue" | "urgent"): CSSProperties {
   const m = Math.max(max, 1);
   const t = Math.min(value / m, 1);
@@ -67,7 +78,7 @@ export default function WorkloadHeatmap({ slug, viewerUserId, users, initialRows
   );
 
   const hasReports = useCallback(
-    (userId: string) => users.some((u) => u.parentId === userId),
+    (userId: string) => hasPrimaryDirectReport(users, userId),
     [users]
   );
 

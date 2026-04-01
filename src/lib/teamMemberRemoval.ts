@@ -1,26 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
+import { linksFromDb, isTargetUnderManager } from "@/lib/reportingLinks";
 
-/** True if `targetId` is a direct or indirect report of `requesterId` (walks parent chain from target upward). */
+/** True if `targetId` is reachable below `requesterId` in the reporting graph (manager → subordinates). */
 export async function isUserInRequestersSubtree(
   prisma: PrismaClient,
   companyId: string,
   requesterId: string,
   targetId: string
 ): Promise<boolean> {
-  let curId: string | null = targetId;
-  const seen = new Set<string>();
-  while (curId) {
-    if (seen.has(curId)) return false;
-    seen.add(curId);
-    const row: { parentId: string | null; companyId: string } | null = await prisma.user.findUnique({
-      where: { id: curId },
-      select: { parentId: true, companyId: true },
-    });
-    if (!row || row.companyId !== companyId) return false;
-    if (row.parentId === requesterId) return true;
-    curId = row.parentId;
-  }
-  return false;
+  const links = await prisma.userReportingLink.findMany({
+    where: { companyId },
+    select: { subordinateId: true, managerId: true, sortOrder: true },
+  });
+  return isTargetUnderManager(linksFromDb(links), requesterId, targetId);
 }
 
 export type RemovalTarget = {

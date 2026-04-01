@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
 import { validateTeamMemberRemoval } from "@/lib/teamMemberRemoval";
+import { getPrimaryManagerId, linksFromDb } from "@/lib/reportingLinks";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
@@ -13,7 +14,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 
   const target = await prisma.user.findUnique({
     where: { id },
-    include: { roleLevel: true, children: { include: { roleLevel: true } } },
+    include: {
+      roleLevel: true,
+      reportingLinksAsManager: {
+        include: { subordinate: { include: { roleLevel: true } } },
+      },
+    },
   });
   if (!target || target.companyId !== user.companyId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -36,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
   }
 
   const body = await req.json();
-  const { firstName, lastName, isActive, roleLevelId, parentId, aiLeaderQaEnabled, isSuperAdmin } = body;
+  const { firstName, lastName, isActive, roleLevelId, aiLeaderQaEnabled, isSuperAdmin } = body;
 
   const billing = currentUser.isSuperAdmin
     ? await prisma.companyBilling.findUnique({ where: { companyId: target.companyId } })
@@ -48,7 +54,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     ...(isActive !== undefined && currentUser.isSuperAdmin && { isActive }),
     ...(Object.prototype.hasOwnProperty.call(body, "roleLevelId") &&
       currentUser.isSuperAdmin && { roleLevelId: roleLevelId || null }),
-    ...(parentId !== undefined && currentUser.isSuperAdmin && { parentId }),
     ...(aiLeaderQaEnabled !== undefined &&
       currentUser.isSuperAdmin && { aiLeaderQaEnabled: Boolean(aiLeaderQaEnabled) }),
     ...(isSuperAdmin !== undefined && currentUser.isSuperAdmin && { isSuperAdmin: Boolean(isSuperAdmin) }),
@@ -73,10 +78,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     nextData.aiAddonAccess = Boolean(body.aiAddonAccess);
   }
 
-  const updated = await prisma.user.update({
-    where: { id },
-    data: nextData as Prisma.UserUpdateInput,
-    include: { roleLevel: true },
+  const shouldSyncManagers =
+    currentUser.isSuperAdmin &&
+    (Object.prototype.hasOwnProperty.call(body, "managerIds") ||
+      Object.prototype.hasOwnProperty.call(body, "parentId"));
+
+  let managerIdsToSync: string[] = [];
+  if (shouldSyncManagers) {
+    if (Array.isArray(body.managerIds)) {
+      managerIdsToSync = body.managerIds.filter((x: unknown): x is string => typeof x === "string");
+    } else if (typeof body.parentId === "string" && body.parentId) {
+      managerIdsToSync = [body.parentId];
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.update({
+      where: { id },
+      data: nextData as Prisma.UserUpdateInput,
+      include: { roleLevel: true },
+    });
+
+    if (shouldSyncManagers) {
+      await tx.userReportingLink.deleteMany({ where: { subordinateId: id } });
+      for (let i = 0; i < managerIdsToSync.length; i++) {
+        await tx.userReportingLink.create({
+          data: {
+            companyId: target.companyId,
+            subordinateId: id,
+            managerId: managerIdsToSync[i],
+            sortOrder: i,
+          },
+        });
+      }
+    }
+
+    return u;
   });
 
   return NextResponse.json({ success: true, data: updated });
@@ -89,7 +126,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Same privilege as direct add: super admin or top two role levels
   if (!currentUser.isSuperAdmin && currentUser.level > 1) {
     return NextResponse.json({ error: "You don't have permission to remove users directly" }, { status: 403 });
   }
@@ -111,10 +147,38 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.updateMany({
-      where: { companyId: currentUser.companyId, parentId: target.id },
-      data: { parentId: target.parentId },
+    const allLinks = await tx.userReportingLink.findMany({
+      where: { companyId: currentUser.companyId },
+      select: { subordinateId: true, managerId: true, sortOrder: true },
     });
+    const lr = linksFromDb(allLinks);
+    const primary = getPrimaryManagerId(lr, target.id);
+
+    const asManager = await tx.userReportingLink.findMany({ where: { managerId: target.id } });
+    for (const link of asManager) {
+      if (primary && primary !== link.subordinateId) {
+        const conflict = await tx.userReportingLink.findUnique({
+          where: {
+            subordinateId_managerId: {
+              subordinateId: link.subordinateId,
+              managerId: primary,
+            },
+          },
+        });
+        if (conflict) {
+          await tx.userReportingLink.delete({ where: { id: link.id } });
+        } else {
+          await tx.userReportingLink.update({
+            where: { id: link.id },
+            data: { managerId: primary },
+          });
+        }
+      } else {
+        await tx.userReportingLink.delete({ where: { id: link.id } });
+      }
+    }
+
+    await tx.userReportingLink.deleteMany({ where: { subordinateId: target.id } });
     await tx.user.update({ where: { id: target.id }, data: { isActive: false } });
   });
 

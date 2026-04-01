@@ -77,12 +77,19 @@ async function main() {
       data: {
         companyId: company.id,
         roleLevelId: managerLevel.id,
-        parentId: superAdmin.id,
         email: "manager@acme.com",
         username: "jsmith",
         passwordHash: await bcrypt.hash("Manager@123", 12),
         firstName: "James",
         lastName: "Smith",
+      },
+    });
+    await prisma.userReportingLink.create({
+      data: {
+        companyId: company.id,
+        subordinateId: manager.id,
+        managerId: superAdmin.id,
+        sortOrder: 0,
       },
     });
 
@@ -91,7 +98,6 @@ async function main() {
       data: {
         companyId: company.id,
         roleLevelId: supervisorLevel.id,
-        parentId: manager.id,
         email: "alex@acme.com",
         username: "alex",
         passwordHash: await bcrypt.hash("Alex@123", 12),
@@ -99,12 +105,14 @@ async function main() {
         lastName: "Johnson",
       },
     });
+    await prisma.userReportingLink.create({
+      data: { companyId: company.id, subordinateId: supervisor1.id, managerId: manager.id, sortOrder: 0 },
+    });
 
     const supervisor2 = await prisma.user.create({
       data: {
         companyId: company.id,
         roleLevelId: supervisorLevel.id,
-        parentId: manager.id,
         email: "maria@acme.com",
         username: "maria",
         passwordHash: await bcrypt.hash("Maria@123", 12),
@@ -112,13 +120,15 @@ async function main() {
         lastName: "Garcia",
       },
     });
+    await prisma.userReportingLink.create({
+      data: { companyId: company.id, subordinateId: supervisor2.id, managerId: manager.id, sortOrder: 0 },
+    });
 
     // Team Members
-    await prisma.user.create({
+    const tom = await prisma.user.create({
       data: {
         companyId: company.id,
         roleLevelId: memberLevel.id,
-        parentId: supervisor1.id,
         email: "tom@acme.com",
         username: "tom",
         passwordHash: await bcrypt.hash("Tom@123", 12),
@@ -126,12 +136,14 @@ async function main() {
         lastName: "Brown",
       },
     });
+    await prisma.userReportingLink.create({
+      data: { companyId: company.id, subordinateId: tom.id, managerId: supervisor1.id, sortOrder: 0 },
+    });
 
-    await prisma.user.create({
+    const lisa = await prisma.user.create({
       data: {
         companyId: company.id,
         roleLevelId: memberLevel.id,
-        parentId: supervisor1.id,
         email: "lisa@acme.com",
         username: "lisa",
         passwordHash: await bcrypt.hash("Lisa@123", 12),
@@ -139,18 +151,23 @@ async function main() {
         lastName: "Davis",
       },
     });
+    await prisma.userReportingLink.create({
+      data: { companyId: company.id, subordinateId: lisa.id, managerId: supervisor1.id, sortOrder: 0 },
+    });
 
-    await prisma.user.create({
+    const mike = await prisma.user.create({
       data: {
         companyId: company.id,
         roleLevelId: memberLevel.id,
-        parentId: supervisor2.id,
         email: "mike@acme.com",
         username: "mike",
         passwordHash: await bcrypt.hash("Mike@123", 12),
         firstName: "Mike",
         lastName: "Wilson",
       },
+    });
+    await prisma.userReportingLink.create({
+      data: { companyId: company.id, subordinateId: mike.id, managerId: supervisor2.id, sortOrder: 0 },
     });
 
     // Sample tasks

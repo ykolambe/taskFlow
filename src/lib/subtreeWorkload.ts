@@ -1,19 +1,21 @@
 import type { Priority } from "@prisma/client";
+import type { ReportingLinkRow } from "@/lib/reportingLinks";
+import { getPrimaryDirectSubordinateIds, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 
+/** @deprecated Use ReportingLinkRow[] with getReachableSubordinateIds */
 export interface SubtreeUserRef {
   id: string;
   parentId: string | null;
 }
 
-/** All user IDs in the hierarchy subtree rooted at rootId (includes root). */
-export function getSubtreeIds(users: SubtreeUserRef[], rootId: string): string[] {
-  const children = users.filter((u) => u.parentId === rootId).map((u) => u.id);
-  return [rootId, ...children.flatMap((id) => getSubtreeIds(users, id))];
+/** All user IDs in the primary org subtree rooted at rootId (includes root). */
+export function getSubtreeIds(links: ReportingLinkRow[], rootId: string): string[] {
+  return getPrimarySubtreeIds(links, rootId);
 }
 
-/** Direct reports only (one level below managerId). */
-export function getDirectReportIds(users: SubtreeUserRef[], managerId: string): string[] {
-  return users.filter((u) => u.parentId === managerId).map((u) => u.id);
+/** Direct reports on the primary tree (one level below managerId). */
+export function getDirectReportIds(links: ReportingLinkRow[], managerId: string): string[] {
+  return getPrimaryDirectSubordinateIds(links, managerId);
 }
 
 export interface WorkloadTaskPick {

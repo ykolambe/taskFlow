@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 import TenantLayout from "@/components/layout/TenantLayout";
 import CalendarView from "@/components/tenant/CalendarView";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
@@ -22,21 +23,8 @@ export default async function CalendarPage({
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company || !company.isActive) notFound();
 
-  // Compute visible subtree
-  const allUsers = await prisma.user.findMany({
-    where: {
-      companyId: company.id,
-      isActive: true,
-      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
-    },
-    select: { id: true, parentId: true },
-  });
-
-  function getSubtreeIds(userId: string): string[] {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
-  }
-  const visibleUserIds = getSubtreeIds(user.userId);
+  const reportingLinks = await fetchReportingLinksForCompany(prisma, company.id);
+  const visibleUserIds = getPrimarySubtreeIds(reportingLinks, user.userId);
 
   // Fetch tasks with due dates visible to this user
   const tasks = await prisma.task.findMany({
@@ -74,7 +62,7 @@ export default async function CalendarPage({
       id: `${company.id}-org`,
       companyId: company.id,
       ownerUserId: null,
-      name: "Org Calendar",
+      name: "Workspace",
       color: "#22c55e",
       type: "ORG",
     },

@@ -14,19 +14,12 @@ import TaskRequestModal from "@/components/tenant/TaskRequestModal";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getPrimarySubtreeIds, linksFromDb } from "@/lib/reportingLinks";
 
 type Tab = "incoming" | "outgoing" | "all";
 
 function reqRef(id: string) {
   return `REQ-${id.slice(0, 8)}`;
-}
-
-function buildSubtreeIds(
-  users: { id: string; parentId: string | null }[],
-  root: string
-): string[] {
-  const children = users.filter((u) => u.parentId === root).map((u) => u.id);
-  return [root, ...children.flatMap((id) => buildSubtreeIds(users, id))];
 }
 
 interface Props {
@@ -40,6 +33,9 @@ export default function TaskRequestsInbox({ user, slug }: Props) {
   const [list, setList] = useState<TaskRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [allUsers, setAllUsers] = useState<UserBrief[]>([]);
+  const [reportingLinkRows, setReportingLinkRows] = useState<
+    { subordinateId: string; managerId: string; sortOrder: number }[]
+  >([]);
 
   const [actionRow, setActionRow] = useState<TaskRequest | null>(null);
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
@@ -71,19 +67,22 @@ export default function TaskRequestsInbox({ user, slug }: Props) {
     fetch(`/api/t/${slug}/users`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.success) setAllUsers(d.data);
+        if (d.success) {
+          setAllUsers(d.data);
+          if (Array.isArray(d.reportingLinks)) setReportingLinkRows(d.reportingLinks);
+        }
       })
       .catch(() => {});
   }, [slug]);
 
   const assignableForApprove = useMemo(() => {
     if (!actionRow || actionType !== "approve") return [];
-    const flat = allUsers.map((u) => ({ id: u.id, parentId: u.parentId ?? null }));
+    const lr = linksFromDb(reportingLinkRows);
     const ids = user.isSuperAdmin
       ? allUsers.map((u) => u.id)
-      : buildSubtreeIds(flat, actionRow.approverId);
+      : getPrimarySubtreeIds(lr, actionRow.approverId);
     return allUsers.filter((u) => ids.includes(u.id) && u.id); // active only
-  }, [actionRow, actionType, allUsers, user.isSuperAdmin]);
+  }, [actionRow, actionType, allUsers, user.isSuperAdmin, reportingLinkRows]);
 
   useEffect(() => {
     if (actionRow && actionType === "approve") {

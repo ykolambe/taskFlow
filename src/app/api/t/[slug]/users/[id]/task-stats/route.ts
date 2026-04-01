@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 
 type Params = { params: Promise<{ slug: string; id: string }> };
 
@@ -15,20 +16,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Make sure target user exists in this company
   const targetUser = await prisma.user.findFirst({
     where: { id: userId, companyId: company.id, isActive: true },
-    select: { id: true, parentId: true },
+    select: { id: true },
   });
   if (!targetUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Visibility: current user can see themselves + their subtree
-  const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
-    select: { id: true, parentId: true },
-  });
-  const getSubtreeIds = (id: string): string[] => {
-    const children = allUsers.filter((u) => u.parentId === id).map((u) => u.id);
-    return [id, ...children.flatMap((cid) => getSubtreeIds(cid))];
-  };
-  const visibleIds = new Set(getSubtreeIds(currentUser.userId));
+  const lr = await fetchReportingLinksForCompany(prisma, company.id);
+  const visibleIds = new Set(getPrimarySubtreeIds(lr, currentUser.userId));
   if (!visibleIds.has(userId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

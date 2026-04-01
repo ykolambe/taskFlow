@@ -11,9 +11,9 @@ import { getSessionMaxAgeSeconds } from "@/lib/sessionDuration";
  * Behind TLS-terminating proxies, ensure X-Forwarded-Proto: https is set so Secure is used.
  */
 export function shouldUseSecureAuthCookies(req: NextRequest): boolean {
-  const override = process.env.COOKIE_SECURE?.toLowerCase();
-  if (override === "false" || override === "0") return false;
-  if (override === "true" || override === "1") return true;
+  const override = process.env.COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "false" || override === "0" || override === "no" || override === "off") return false;
+  if (override === "true" || override === "1" || override === "yes" || override === "on") return true;
 
   const forwarded = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
   if (forwarded === "https") return true;
@@ -31,11 +31,14 @@ export function shouldUseSecureAuthCookies(req: NextRequest): boolean {
 
 /** Options for platform_token and tenant_*_token cookies. */
 export function authSessionCookieOptions(req: NextRequest) {
+  const maxAge = getSessionMaxAgeSeconds();
   return {
     httpOnly: true as const,
     secure: shouldUseSecureAuthCookies(req),
     sameSite: "lax" as const,
-    maxAge: getSessionMaxAgeSeconds(),
+    maxAge,
+    /** Some mobile/PWA stacks persist Expires more reliably than Max-Age alone */
+    expires: new Date(Date.now() + maxAge * 1000),
     path: "/",
   };
 }

@@ -155,11 +155,11 @@ export default function TenantLayout({
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Company branding */}
-      <div className="px-5 py-5 border-b border-surface-800/80">
+      <div className="px-5 py-5 border-b border-surface-200/90 dark:border-surface-800/80">
         <div className="flex items-center gap-3">
           <CompanyMark size="md" companyName={companyName} companyLogoUrl={companyLogoUrl} />
           <div className="min-w-0">
-            <p className="font-extrabold text-surface-50 text-sm truncate tracking-tight">{companyName}</p>
+            <p className="font-extrabold text-surface-900 dark:text-surface-50 text-sm truncate tracking-tight">{companyName}</p>
             <p className="text-[10px] text-surface-500 font-semibold uppercase tracking-widest">{slug}</p>
           </div>
         </div>
@@ -177,14 +177,16 @@ export default function TenantLayout({
               className={cn(
                 "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative",
                 active
-                  ? "bg-primary-500/20 text-primary-200 border border-primary-500/30 shadow-sm shadow-primary-900/20"
-                  : "text-surface-400 hover:text-surface-100 hover:bg-surface-800/80"
+                  ? "bg-primary-100 text-primary-900 border border-primary-200/90 shadow-sm dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30 dark:shadow-sm dark:shadow-primary-900/20"
+                  : "text-surface-600 hover:text-surface-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
               )}
             >
               <Icon
                 className={cn(
                   "w-4 h-4 flex-shrink-0 transition-colors",
-                  active ? "text-primary-300" : "text-surface-500 group-hover:text-surface-300"
+                  active
+                    ? "text-primary-700 dark:text-primary-300"
+                    : "text-surface-500 group-hover:text-surface-700 dark:text-surface-500 dark:group-hover:text-surface-300"
                 )}
               />
               <span className="flex-1">{label}</span>
@@ -193,25 +195,25 @@ export default function TenantLayout({
                   {badge > 9 ? "9+" : badge}
                 </span>
               )}
-              {active && <ChevronRight className="w-3.5 h-3.5 text-primary-400" />}
+              {active && <ChevronRight className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />}
             </Link>
           );
         })}
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-3 border-t border-surface-800/80 space-y-0.5">
+      <div className="px-3 py-3 border-t border-surface-200/90 dark:border-surface-800/80 space-y-0.5">
         <Link
           href={`/t/${slug}/profile`}
           onClick={() => setSidebarOpen(false)}
           className={cn(
             "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
             isActive(`/t/${slug}/profile`)
-              ? "bg-primary-500/20 text-primary-200 border border-primary-500/30"
-              : "text-surface-400 hover:text-surface-100 hover:bg-surface-800/80"
+              ? "bg-primary-100 text-primary-900 border border-primary-200/90 dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30"
+              : "text-surface-600 hover:text-surface-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
           )}
         >
-          <UserCircle className="w-4 h-4 flex-shrink-0 text-surface-500 group-hover:text-surface-300" />
+          <UserCircle className="w-4 h-4 flex-shrink-0 text-surface-500 group-hover:text-surface-700 dark:group-hover:text-surface-300" />
           <span className="flex-1">My Profile</span>
         </Link>
         {user.isSuperAdmin && (
@@ -221,11 +223,11 @@ export default function TenantLayout({
             className={cn(
               "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
               isActive(`/t/${slug}/billing`)
-                ? "bg-primary-500/20 text-primary-200 border border-primary-500/30"
-                : "text-surface-400 hover:text-surface-100 hover:bg-surface-800/80"
+                ? "bg-primary-100 text-primary-900 border border-primary-200/90 dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30"
+                : "text-surface-600 hover:text-surface-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
             )}
           >
-            <CreditCard className="w-4 h-4 flex-shrink-0 text-surface-500 group-hover:text-surface-300" />
+            <CreditCard className="w-4 h-4 flex-shrink-0 text-surface-500 group-hover:text-surface-700 dark:group-hover:text-surface-300" />
             <span className="flex-1">Billing & Usage</span>
           </Link>
         )}
@@ -238,7 +240,7 @@ export default function TenantLayout({
             size="sm"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-surface-200 truncate tracking-tight">
+            <p className="text-xs font-semibold text-surface-800 dark:text-surface-200 truncate tracking-tight">
               {user.firstName} {user.lastName}
             </p>
             <p className="text-[10px] text-surface-500 truncate">{user.email}</p>
@@ -258,7 +260,7 @@ export default function TenantLayout({
   return (
     <div className="flex h-screen bg-surface-950 overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-60 flex-col bg-surface-900/95 border-r border-surface-800/70 flex-shrink-0 backdrop-blur-xl">
+      <aside className="hidden lg:flex w-60 flex-col bg-surface-900/95 border-r border-surface-200/90 dark:border-surface-800/70 flex-shrink-0 backdrop-blur-xl">
         <SidebarContent />
       </aside>
 
@@ -266,11 +268,11 @@ export default function TenantLayout({
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-surface-900 border-r border-surface-800/70 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-surface-800/80 gap-2">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-surface-900 border-r border-surface-200 dark:border-surface-800/70 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-surface-200/90 dark:border-surface-800/80 gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <CompanyMark size="sm" companyName={companyName} companyLogoUrl={companyLogoUrl} />
-                <span className="font-extrabold text-surface-50 text-sm tracking-tight truncate">{companyName}</span>
+                <span className="font-extrabold text-surface-900 dark:text-surface-50 text-sm tracking-tight truncate">{companyName}</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="text-surface-400 hover:text-surface-100 p-1 flex-shrink-0">
                 <X className="w-5 h-5" />
@@ -284,7 +286,7 @@ export default function TenantLayout({
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Mobile header */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-900/95 border-b border-surface-800/70 backdrop-blur-xl">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-900/95 border-b border-surface-200/90 dark:border-surface-800/70 backdrop-blur-xl">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-surface-400 hover:text-surface-100 p-1 transition-colors"
@@ -293,7 +295,7 @@ export default function TenantLayout({
           </button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <CompanyMark size="sm" companyName={companyName} companyLogoUrl={companyLogoUrl} />
-            <span className="font-extrabold text-surface-50 text-sm truncate tracking-tight">{companyName}</span>
+            <span className="font-extrabold text-surface-900 dark:text-surface-50 text-sm truncate tracking-tight">{companyName}</span>
           </div>
           {pendingApprovals > 0 && (
             <Link href={`/t/${slug}/approvals`} className="relative">
@@ -312,7 +314,7 @@ export default function TenantLayout({
         </main>
 
         {/* Mobile Bottom Nav */}
-        <nav className="lg:hidden flex items-center bg-surface-900/95 border-t border-surface-800/70 px-2 py-1 backdrop-blur-xl">
+        <nav className="lg:hidden flex items-center bg-surface-900/95 border-t border-surface-200/90 dark:border-surface-800/70 px-2 py-1 backdrop-blur-xl">
           {navItems.slice(0, 5).map(({ href, label, icon: Icon, badge }) => {
             const active = isActive(href);
             return (
@@ -321,7 +323,7 @@ export default function TenantLayout({
                 href={href}
                 className={cn(
                   "flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl transition-all",
-                  active ? "text-primary-300" : "text-surface-600 hover:text-surface-300"
+                  active ? "text-primary-700 dark:text-primary-300" : "text-surface-600 hover:text-surface-800 dark:hover:text-surface-300"
                 )}
               >
                 <div className="relative">

@@ -1,6 +1,11 @@
 import { redirect, notFound } from "next/navigation";
 import { getTenantUserFresh } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  fetchReportingLinksForCompany,
+  getPrimaryDirectSubordinateIds,
+  getPrimarySubtreeIds,
+} from "@/lib/reportingLinks";
 import { isExecutiveDashboardUser } from "@/lib/utils";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
 import TenantLayout from "@/components/layout/TenantLayout";
@@ -19,23 +24,19 @@ export default async function DashboardPage({
   if (!company || !company.isActive) notFound();
   const aiEnabled = Boolean(company.billing?.aiAddonEnabled);
 
-  // Get visible subordinate IDs (users below in hierarchy)
-  const allUsers = await prisma.user.findMany({
-    where: {
-      companyId: company.id,
-      isActive: true,
-      OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
-    },
-    include: { roleLevel: true },
-  });
+  const [allUsers, reportingLinks] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true,
+        OR: [{ id: user.userId }, { isTenantBootstrapAccount: false }],
+      },
+      include: { roleLevel: true },
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
 
-  // Get IDs of users the current user can see (themselves + below in hierarchy)
-  function getSubtreeIds(userId: string): string[] {
-    const directChildren = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...directChildren.flatMap((id) => getSubtreeIds(id))];
-  }
-
-  const visibleIds = getSubtreeIds(user.userId);
+  const visibleIds = getPrimarySubtreeIds(reportingLinks, user.userId);
   const teamAssigneeIds = visibleIds.filter((id) => id !== user.userId);
   const viewerRow = allUsers.find((u) => u.id === user.userId);
   const leaderQaEnabled = Boolean(viewerRow?.aiLeaderQaEnabled);
@@ -141,7 +142,7 @@ export default async function DashboardPage({
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const directReports = allUsers.filter((u) => u.parentId === user.userId).length;
+  const directReports = getPrimaryDirectSubordinateIds(reportingLinks, user.userId).length;
   const remindersHasMore = reminderOpenCount > reminderRows.length;
   const recentTasksHasMore = myTasksTotalCount > RECENT_TASKS_PAGE;
 

@@ -5,6 +5,7 @@ import TenantLayout from "@/components/layout/TenantLayout";
 import { CreditCard, Building2, Users, CheckSquare, Lightbulb, AlertCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/Card";
 import { formatDate } from "@/lib/utils";
+import { countUsersWithEffectiveAi } from "@/lib/ai/entitlement";
 import { effectiveSeatLimit } from "@/lib/planEntitlements";
 
 function formatCurrency(amount: number, currency: string) {
@@ -57,6 +58,9 @@ export default async function TenantBillingPage({
       ? Math.min(100, Math.round((seats / enforcedSeatCap) * 100))
       : null;
 
+  const aiSeatsUsed =
+    company.billing?.aiAddonEnabled ? await countUsersWithEffectiveAi(company.id) : 0;
+
   const nextBillingFrequencyLabel = billingCycle === "annual" ? "annualized to monthly" : "monthly";
 
   return (
@@ -70,8 +74,8 @@ export default async function TenantBillingPage({
               Usage & Plan
             </h1>
             <p className="text-sm text-surface-400 mt-1">
-              Pro workspaces are billed by active seat count × your per-seat rate. Add-on features can be assigned per user
-              on the Team page.
+              Pro workspaces are billed by active seat count × your per-seat rate. Chat and recurring are on for members by
+              default when the add-on is purchased; AI can be assigned per user or by hierarchy tier in Settings.
             </p>
           </div>
           <div className="hidden sm:block">
@@ -167,6 +171,16 @@ export default async function TenantBillingPage({
               <p className="text-xs text-surface-500 font-semibold uppercase tracking-widest">Billing cycle</p>
               <p className="text-surface-200 font-semibold">{billingCycle}</p>
             </div>
+            {company.billing?.aiAddonEnabled && (
+              <div className="col-span-2">
+                <p className="text-xs text-surface-500 font-semibold uppercase tracking-widest">AI-enabled members</p>
+                <p className="text-surface-200 font-semibold">{aiSeatsUsed}</p>
+                <p className="text-[11px] text-surface-500 mt-1">
+                  Count includes users with AI from a hierarchy tier default or an explicit Team toggle (when your plan
+                  includes AI).
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-surface-700/50">

@@ -186,8 +186,8 @@ export async function createTenantWorkspace(
         lastName,
         isSuperAdmin: true,
         isTenantBootstrapAccount: true,
-        chatAddonAccess: boot.chatAddonEnabled ?? false,
-        recurringAddonAccess: boot.recurringAddonEnabled ?? false,
+        chatAddonAccess: boot.chatAddonEnabled ?? true,
+        recurringAddonAccess: boot.recurringAddonEnabled ?? true,
         aiAddonAccess: boot.aiAddonEnabled ?? false,
       },
     });

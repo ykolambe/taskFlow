@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 import { getNextDueDate } from "@/lib/utils";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
@@ -20,15 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     return NextResponse.json({ error: "Recurring is not available for your account." }, { status: 403 });
   }
 
-  const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isTenantBootstrapAccount: false },
-    select: { id: true, parentId: true },
-  });
-  const getSubtreeIds = (userId: string): string[] => {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIds(id))];
-  };
-  const visibleIds = getSubtreeIds(user.userId);
+  const lr = await fetchReportingLinksForCompany(prisma, company.id);
+  const visibleIds = getPrimarySubtreeIds(lr, user.userId);
 
   const recurring = await prisma.recurringTask.findMany({
     where: { companyId: company.id, assigneeId: { in: visibleIds } },

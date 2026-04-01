@@ -3,8 +3,10 @@ import { z } from "zod";
 import { createHash, randomUUID } from "crypto";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSubtreeIds } from "@/lib/subtreeWorkload";
+import { fetchReportingLinksForCompany } from "@/lib/reportingLinks";
+import { getSubtreeIds, getDirectReportIds } from "@/lib/subtreeWorkload";
 import { isUserAiEnabled } from "@/lib/ai/entitlement";
+import { fetchLeaderQaOrgContext, filterOpenTasksForLeaderQa } from "@/lib/ai/leaderQaOrgContext";
 import { buildLeaderQaPrompt, leaderQaResponseSchema } from "@/lib/ai/leaderQaPrompt";
 import { generateGeminiJson } from "@/lib/ai/gemini";
 import type { LeaderQaAnswer, LeaderQaMetric, LeaderQaResponse } from "@/lib/ai/types";
@@ -152,20 +154,23 @@ function fallbackAnswer(question: string, metrics: LeaderQaMetric[]): LeaderQaAn
   const highUrgent = Number(metrics.find((m) => m.key === "M3")?.value ?? 0);
   const approvals = Number(metrics.find((m) => m.key === "M5")?.value ?? 0);
   const active = Number(metrics.find((m) => m.key === "M1")?.value ?? 0);
+  const pendingReq = Number(metrics.find((m) => m.key === "M9")?.value ?? 0);
+  const recurring = Number(metrics.find((m) => m.key === "M10")?.value ?? 0);
+  const ideasOpen = Number(metrics.find((m) => m.key === "M11")?.value ?? 0);
   return {
-    answer: `Based on current metrics for "${question}", slippage is mainly driven by overdue work (${overdue}) and priority pressure (${highUrgent} high/urgent open tasks) across ${active} active tasks.`,
+    answer: `Based on current org data for "${question}": ${active} open tasks (${overdue} overdue, ${highUrgent} high/urgent), ${pendingReq} pending task requests, ${recurring} active recurring series, ${ideasOpen} ideas not yet converted, ${approvals} pending approvals.`,
     topDrivers: [
       `Overdue tasks remain high (${overdue}) [M2]`,
       `High/urgent workload is elevated (${highUrgent}) [M3]`,
-      `Pending approvals can delay execution (${approvals}) [M5]`,
+      `Pending task requests (${pendingReq}) [M9]`,
     ],
     actions: [
-      "Escalate top 5 overdue tasks with named owners this week.",
-      "Rebalance high-priority assignments across available direct reports.",
-      "Clear pending approvals older than 48 hours.",
+      "Escalate top overdue tasks with named owners this week.",
+      "Rebalance high-priority assignments across the visible team.",
+      "Clear pending task requests and approvals older than 48 hours.",
     ],
     confidence: "MEDIUM",
-    citations: ["M1", "M2", "M3", "M5"],
+    citations: ["M1", "M2", "M3", "M5", "M9", "M10", "M11"],
   };
 }
 
@@ -218,20 +223,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "LeaderGPT access is not enabled for your account." }, { status: 403 });
   }
 
-  const users = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      parentId: true,
-      email: true,
-      username: true,
-      roleLevel: { select: { name: true } },
-    },
-  });
-  const refs = users.map((u) => ({ id: u.id, parentId: u.parentId }));
-  const visibleIds = getSubtreeIds(refs, viewer.userId);
+  const [users, lr] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        username: true,
+        roleLevel: { select: { name: true } },
+      },
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
+  const visibleIds = getSubtreeIds(lr, viewer.userId);
+  const directReportIdSet = new Set(getDirectReportIds(lr, viewer.userId));
   const visibleSet = new Set(visibleIds);
   const visibleUsers = users.filter((u) => visibleSet.has(u.id));
 
@@ -335,7 +342,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const [tasks, approvalsPending, remindersOverdue] = await Promise.all([
     prisma.task.findMany({
       where: { companyId: company.id, assigneeId: { in: visibleIds }, isArchived: false },
-      select: { status: true, priority: true, dueDate: true, createdAt: true, completedAt: true },
+      select: {
+        status: true,
+        priority: true,
+        dueDate: true,
+        createdAt: true,
+        completedAt: true,
+        title: true,
+        assignee: { select: { firstName: true, lastName: true } },
+      },
     }),
     prisma.approvalRequest.count({ where: { companyId: company.id, status: "PENDING" } }),
     prisma.userReminder.count({
@@ -343,12 +358,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }),
   ]);
 
-  const openTasks = tasks.filter((t) => !doneKeys.has(t.status) && t.status !== "COMPLETED");
+  const openTasks = filterOpenTasksForLeaderQa(tasks, doneKeys);
   const openLast7d = openTasks.filter((t) => t.createdAt >= since7d).length;
   const openLast30d = openTasks.filter((t) => t.createdAt >= since30d).length;
   const completedLast7d = tasks.filter((t) => t.completedAt && t.completedAt >= since7d).length;
   const overdue = openTasks.filter((t) => t.dueDate && t.dueDate < now).length;
   const highUrgent = openTasks.filter((t) => t.priority === "HIGH" || t.priority === "URGENT").length;
+
+  const orgContext = await fetchLeaderQaOrgContext(prisma, {
+    companyId: company.id,
+    visibleUserIds: visibleIds,
+    viewerUserId: viewer.userId,
+    users,
+    reportingLinks: lr,
+    openTasks,
+    now,
+  });
 
   const metrics: LeaderQaMetric[] = [
     { key: "M1", label: "Open tasks", value: openTasks.length, window: "now", source: "tasks" },
@@ -356,9 +381,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     { key: "M3", label: "High/Urgent open tasks", value: highUrgent, window: "now", source: "tasks" },
     { key: "M4", label: "Completed tasks", value: completedLast7d, window: "last_7d", source: "tasks" },
     { key: "M5", label: "Pending approvals", value: approvalsPending, window: "now", source: "approvals" },
-    { key: "M6", label: "Overdue reminders", value: remindersOverdue, window: "now", source: "reminders" },
+    { key: "M6", label: "Overdue reminders (you)", value: remindersOverdue, window: "now", source: "reminders" },
     { key: "M7", label: "Open tasks created", value: openLast7d, window: "last_7d", source: "tasks" },
     { key: "M8", label: "Open tasks created", value: openLast30d, window: "last_30d", source: "tasks" },
+    {
+      key: "M9",
+      label: "Pending task requests (visible)",
+      value: orgContext.counts.pendingTaskRequests,
+      window: "now",
+      source: "task_requests",
+    },
+    {
+      key: "M10",
+      label: "Active recurring series (visible)",
+      value: orgContext.counts.activeRecurringSeries,
+      window: "now",
+      source: "recurring_tasks",
+    },
+    {
+      key: "M11",
+      label: "Ideas not converted (visible)",
+      value: orgContext.counts.ideasNotConverted,
+      window: "now",
+      source: "ideas",
+    },
+    {
+      key: "M12",
+      label: "Calendar entries next 30d (org + visible)",
+      value: orgContext.counts.calendarEntriesNext30Days,
+      window: "next_30d",
+      source: "calendar",
+    },
+    {
+      key: "M13",
+      label: "Your reminders due in next 7 days",
+      value: orgContext.myReminders.dueNext7DaysCount,
+      window: "next_7d",
+      source: "reminders",
+    },
   ];
 
   if (maybeTaskIntent(question) && maybeBulkIntent(question)) {
@@ -386,7 +446,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       const pool = visibleUsers.filter((u) => u.id !== viewer.userId);
 
       if (spec.targetScope === "DIRECT_REPORTS") {
-        for (const u of pool.filter((u) => u.parentId === viewer.userId)) selectedById.set(u.id, u);
+        for (const u of pool.filter((u) => directReportIdSet.has(u.id))) selectedById.set(u.id, u);
       } else if (spec.targetScope === "TEAM_ALL") {
         for (const u of pool) selectedById.set(u.id, u);
       } else if (spec.targetScope === "ROLE") {
@@ -566,7 +626,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   let result: LeaderQaAnswer;
   let source: "ai" | "fallback" = "ai";
   try {
-    const prompt = buildLeaderQaPrompt({ question, teamLabel: "Visible org scope", metrics });
+    const prompt = buildLeaderQaPrompt({
+      question,
+      teamLabel: "Visible org scope (primary reporting tree)",
+      metrics,
+      orgContext,
+    });
     const generated = await generateGeminiJson<LeaderQaAnswer>({
       prompt,
       responseSchema: leaderQaResponseSchema as unknown as Record<string, unknown>,

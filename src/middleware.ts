@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify, SignJWT, type JWTPayload } from "jose";
+import { authSessionCookieOptions } from "@/lib/authCookies";
+import { getJwtExpirationDurationString, getSessionMaxAgeSeconds } from "@/lib/sessionDuration";
 
 const getSecret = () =>
   new TextEncoder().encode(
     process.env.JWT_SECRET || "fallback-dev-secret-please-change"
   );
+
+/** Tolerate phone/desktop clock skew so valid sessions are not dropped on every cold start. */
+const JWT_CLOCK_TOLERANCE_SEC = 120;
 
 function getSubdomain(hostname: string, rootDomain: string): string | null {
   if (
@@ -24,7 +29,6 @@ function getSubdomain(hostname: string, rootDomain: string): string | null {
     return withoutPort.replace(`.${rootWithoutPort}`, "");
   }
 
-  // Handle x.localhost pattern
   if (withoutPort.endsWith(".localhost")) {
     return withoutPort.replace(".localhost", "");
   }
@@ -33,8 +37,34 @@ function getSubdomain(hostname: string, rootDomain: string): string | null {
 }
 
 async function verifyJwt(token: string) {
-  const { payload } = await jwtVerify(token, getSecret());
+  const { payload } = await jwtVerify(token, getSecret(), {
+    clockTolerance: JWT_CLOCK_TOLERANCE_SEC,
+  });
   return payload;
+}
+
+function stripJwtStdClaims(p: JWTPayload): Record<string, unknown> {
+  const o = { ...p } as Record<string, unknown>;
+  delete o.exp;
+  delete o.iat;
+  delete o.nbf;
+  return o;
+}
+
+/** Re-issue JWT when more than half the session lifetime has passed (keeps active PWA users signed in). */
+async function maybeRefreshTenantSessionToken(payload: JWTPayload): Promise<string | null> {
+  const exp = payload.exp;
+  if (typeof exp !== "number") return null;
+  const now = Math.floor(Date.now() / 1000);
+  const ttl = exp - now;
+  const maxSeconds = getSessionMaxAgeSeconds();
+  if (ttl <= 0 || ttl >= maxSeconds * 0.5) return null;
+  const claims = stripJwtStdClaims(payload);
+  return new SignJWT(claims)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(getJwtExpirationDurationString())
+    .sign(getSecret());
 }
 
 export async function middleware(request: NextRequest) {
@@ -42,9 +72,6 @@ export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "localhost:3000";
   const rootDomain = process.env.ROOT_DOMAIN || "localhost:3000";
 
-  // Skip static uploads and anything that looks like a file path. Middleware runs
-  // before static/route handlers on some stacks — excluding these prefixes avoids
-  // auth/subdomain logic touching public files (fixes new uploads 404 on HTTP/IP).
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -58,19 +85,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Subdomain → rewrite to /t/[slug] ──────────────────────────────
   const subdomain = getSubdomain(hostname, rootDomain);
 
   if (subdomain && !pathname.startsWith("/t/") && !pathname.startsWith("/api/")) {
     const url = request.nextUrl.clone();
     url.pathname = `/t/${subdomain}${pathname === "/" ? "" : pathname}`;
-    if (!url.pathname.endsWith("/")) {
-      // keep as-is
-    }
     return NextResponse.rewrite(url);
   }
 
-  // ── Platform routes auth ───────────────────────────────────────────
   if (pathname.startsWith("/platform") && !pathname.startsWith("/platform/login")) {
     const token = request.cookies.get("platform_token")?.value;
     if (!token) {
@@ -88,13 +110,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Tenant routes auth ─────────────────────────────────────────────
   const tenantMatch = pathname.match(/^\/t\/([^/]+)(\/.*)?$/);
   if (tenantMatch) {
     const slug = tenantMatch[1];
     const subPath = tenantMatch[2] || "/";
 
-    // Allow login / password flows without auth
     if (
       subPath === "/login" ||
       subPath === "/login/" ||
@@ -106,35 +126,55 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Public per-tenant PWA manifest (no cookie; browsers fetch when installing)
     if (subPath === "/manifest" || subPath === "/manifest/") {
       return NextResponse.next();
     }
 
-    // Root of tenant → redirect to dashboard or login
-    if (subPath === "/" || subPath === "") {
-      const token = request.cookies.get(`tenant_${slug}_token`)?.value;
+    const cookieName = `tenant_${slug}_token`;
+    const loginUrl = new URL(`/t/${slug}/login`, request.url);
+
+    const runTenantAuth = async (mode: "next" | "redirectDashboard"): Promise<NextResponse> => {
+      const token = request.cookies.get(cookieName)?.value;
       if (!token) {
-        return NextResponse.redirect(new URL(`/t/${slug}/login`, request.url));
+        return NextResponse.redirect(loginUrl);
       }
-      return NextResponse.redirect(new URL(`/t/${slug}/dashboard`, request.url));
+      let payload: JWTPayload;
+      try {
+        payload = await verifyJwt(token);
+      } catch {
+        const res = NextResponse.redirect(loginUrl);
+        res.cookies.delete(cookieName);
+        return res;
+      }
+      if ((payload as { type?: string }).type !== "tenant") {
+        const res = NextResponse.redirect(loginUrl);
+        res.cookies.delete(cookieName);
+        return res;
+      }
+
+      const newToken = await maybeRefreshTenantSessionToken(payload);
+      if (newToken) {
+        if (mode === "next") {
+          const res = NextResponse.next();
+          res.cookies.set(cookieName, newToken, authSessionCookieOptions(request));
+          return res;
+        }
+        const dash = new URL(`/t/${slug}/dashboard`, request.url);
+        const res = NextResponse.redirect(dash);
+        res.cookies.set(cookieName, newToken, authSessionCookieOptions(request));
+        return res;
+      }
+
+      return mode === "next"
+        ? NextResponse.next()
+        : NextResponse.redirect(new URL(`/t/${slug}/dashboard`, request.url));
+    };
+
+    if (subPath === "/" || subPath === "") {
+      return runTenantAuth("redirectDashboard");
     }
 
-    // Protected tenant routes
-    const token = request.cookies.get(`tenant_${slug}_token`)?.value;
-    if (!token) {
-      return NextResponse.redirect(new URL(`/t/${slug}/login`, request.url));
-    }
-    try {
-      const payload = await verifyJwt(token);
-      if ((payload as { type?: string }).type !== "tenant") {
-        return NextResponse.redirect(new URL(`/t/${slug}/login`, request.url));
-      }
-    } catch {
-      const res = NextResponse.redirect(new URL(`/t/${slug}/login`, request.url));
-      res.cookies.delete(`tenant_${slug}_token`);
-      return res;
-    }
+    return runTenantAuth("next");
   }
 
   return NextResponse.next();
@@ -142,11 +182,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Do not run middleware for public upload dirs or file-like paths — lets
-     * /attachments, /logos, etc. reach Route Handlers or static files without
-     * subdomain/auth interference.
-     */
     "/((?!_next/static|_next/image|favicon.ico|uploads/|attachments/|avatars/|logos/|api/).*)",
   ],
 };

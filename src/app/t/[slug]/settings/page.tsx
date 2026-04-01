@@ -18,7 +18,10 @@ export default async function SettingsPage({
   const [company, taskStatuses] = await Promise.all([
     prisma.company.findUnique({
       where: { slug },
-      include: { roleLevels: { orderBy: { level: "asc" } } },
+      include: {
+        roleLevels: { orderBy: { level: "asc" } },
+        hierarchyTiers: { orderBy: { level: "asc" } },
+      },
     }),
     prisma.taskStatusConfig.findMany({
       where: { company: { slug } },

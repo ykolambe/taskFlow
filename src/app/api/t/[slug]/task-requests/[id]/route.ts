@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
 
 const USER_SELECT = {
   id: true,
@@ -19,14 +20,6 @@ function formatDateForReminderNote(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function buildSubtreeIds(
-  allUsers: { id: string; parentId: string | null }[],
-  rootId: string
-): string[] {
-  const children = allUsers.filter((u) => u.parentId === rootId).map((u) => u.id);
-  return [rootId, ...children.flatMap((id) => buildSubtreeIds(allUsers, id))];
 }
 
 export async function PATCH(
@@ -89,10 +82,7 @@ export async function PATCH(
 
     const finalAssigneeId = assigneeId && String(assigneeId).trim() ? String(assigneeId).trim() : tr.requesterId;
 
-    const allUsers = await prisma.user.findMany({
-      where: { companyId: company.id, isTenantBootstrapAccount: false },
-      select: { id: true, parentId: true },
-    });
+    const lr = await fetchReportingLinksForCompany(prisma, company.id);
 
     if (user.isSuperAdmin) {
       const assigneeOk = await prisma.user.findFirst({
@@ -102,7 +92,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid assignee" }, { status: 400 });
       }
     } else {
-      const visibleIds = buildSubtreeIds(allUsers, tr.approverId);
+      const visibleIds = getPrimarySubtreeIds(lr, tr.approverId);
       if (!visibleIds.includes(finalAssigneeId)) {
         return NextResponse.json(
           { error: "Assignee must be you or someone in your hierarchy below you" },

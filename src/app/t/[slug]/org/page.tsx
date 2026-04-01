@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import TenantLayout from "@/components/layout/TenantLayout";
 import OrgChart from "@/components/tenant/OrgChart";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
+import { getPrimaryManagerId, linksFromDb } from "@/lib/reportingLinks";
 
 export default async function OrgChartPage({
   params,
@@ -17,13 +18,18 @@ export default async function OrgChartPage({
   const company = await prisma.company.findUnique({ where: { slug } });
   if (!company || !company.isActive) notFound();
 
-  // Load all active users (including bootstrap) so parentId chains resolve. Bootstrap
-  // accounts are hidden from the chart but their reports must attach at the root.
-  const allUsers = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true },
-    include: { roleLevel: true },
-    orderBy: { firstName: "asc" },
-  });
+  const [allUsers, linkRows] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: company.id, isActive: true },
+      include: { roleLevel: true },
+      orderBy: { firstName: "asc" },
+    }),
+    prisma.userReportingLink.findMany({
+      where: { companyId: company.id },
+      select: { subordinateId: true, managerId: true, sortOrder: true },
+    }),
+  ]);
+  const reportingLinks = linksFromDb(linkRows);
 
   allUsers.sort((a, b) => {
     const la = a.roleLevel?.level ?? 999;
@@ -51,7 +57,7 @@ export default async function OrgChartPage({
 
   /** Parent for tree edges: root if no parent, or parent not in the drawable org tree (bootstrap / super-only / missing flag). */
   function effectiveParentId(u: (typeof allUsers)[number]): string | null {
-    const p = u.parentId;
+    const p = getPrimaryManagerId(reportingLinks, u.id);
     if (!p) return null;
     const parent = allUsers.find((x) => x.id === p);
     if (!parent) return null;

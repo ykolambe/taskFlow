@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
-  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus, Target, Flag, Check, Trash2, PanelTopClose, PanelTopOpen,
+  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus, Target, Flag, Check, Trash2, X,
 } from "lucide-react";
 import { TenantTokenPayload } from "@/lib/auth";
 import { Task, RecurringTask, CalendarCollection, CalendarEntry } from "@/types";
@@ -92,25 +92,67 @@ interface Props {
   slug: string;
 }
 
+function calendarLabel(c: CalendarCollection): string {
+  if (c.type === "ORG" && (c.name === "Org Calendar" || c.name === "Workspace")) return "Workspace";
+  return c.name;
+}
+
+function calendarTypeLabel(type: CalendarCollection["type"]): string {
+  if (type === "ORG") return "Shared";
+  return "Personal";
+}
+
 export default function CalendarView({ user, tasks, recurringTasks, calendars, calendarEntries, slug }: Props) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [view, setView] = useState<"month" | "week">("month");
-  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(calendars.map((c) => c.id));
+  const [selectedCalendarId, setSelectedCalendarId] = useState(
+    () => calendars.find((c) => c.type === "ORG")?.id ?? calendars[0]?.id ?? ""
+  );
+  const [addCalendarOpen, setAddCalendarOpen] = useState(false);
   const [newCalendarName, setNewCalendarName] = useState("");
-  const [newCalendarColor, setNewCalendarColor] = useState("#22c55e");
+  const [newCalendarColor, setNewCalendarColor] = useState("#6366f1");
   const [newCalendarType, setNewCalendarType] = useState<"PERSONAL" | "ORG">("PERSONAL");
   const [creatingCalendar, setCreatingCalendar] = useState(false);
-  const [goalCalendarId, setGoalCalendarId] = useState(calendars[0]?.id ?? "");
+  const [createCalendarError, setCreateCalendarError] = useState<string | null>(null);
   const [goalTitle, setGoalTitle] = useState("");
   const [goalNotes, setGoalNotes] = useState("");
   const [goalKind, setGoalKind] = useState<"GOAL" | "MILESTONE">("GOAL");
-  const [goalColor, setGoalColor] = useState("#22c55e");
   const [goalDate, setGoalDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [deletingCalendarId, setDeletingCalendarId] = useState<string | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
-  const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!calendars.length) return;
+    if (!calendars.some((c) => c.id === selectedCalendarId)) {
+      setSelectedCalendarId(calendars.find((c) => c.type === "ORG")?.id ?? calendars[0].id);
+    }
+  }, [calendars, selectedCalendarId]);
+
+  useEffect(() => {
+    if (!addCalendarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !creatingCalendar) setAddCalendarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addCalendarOpen, creatingCalendar]);
+
+  const calendarById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
+  const selectedCalendar = calendarById.get(selectedCalendarId);
+  const workspaceMode = selectedCalendar?.type === "ORG";
+
+  /** Workspace: full team workload. Personal calendars: only your tasks (no recurring on the grid). */
+  const scopedTasks = useMemo(() => {
+    if (workspaceMode) return tasks;
+    return tasks.filter((t) => t.assigneeId === user.userId);
+  }, [tasks, workspaceMode, user.userId]);
+
+  const scopedRecurring = useMemo(() => {
+    if (workspaceMode) return recurringTasks;
+    return [];
+  }, [recurringTasks, workspaceMode]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -127,7 +169,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
     };
 
     // Tasks with due dates
-    for (const task of tasks) {
+    for (const task of scopedTasks) {
       if (!task.dueDate) continue;
       const d = new Date(task.dueDate);
       addEvent(d, {
@@ -142,8 +184,8 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       });
     }
 
-    // Recurring task occurrences
-    for (const rt of recurringTasks) {
+    // Recurring task occurrences (workspace only)
+    for (const rt of scopedRecurring) {
       if (!rt.isActive) continue;
       const dates = getRecurringDatesInMonth(rt, year, month);
       for (const d of dates) {
@@ -157,15 +199,16 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       }
     }
 
-    // Goals / milestones
+    // Goals / milestones — only for the focused calendar; color follows calendar (not stale entry color)
     for (const goal of calendarEntries) {
-      if (!selectedCalendarIds.includes(goal.calendarId)) continue;
+      if (goal.calendarId !== selectedCalendarId) continue;
+      const cal = calendarById.get(goal.calendarId);
       const d = new Date(goal.startAt);
       addEvent(d, {
         id: goal.id,
         title: goal.title,
         type: "goal",
-        color: goal.color,
+        color: cal?.color ?? goal.color,
         calendarId: goal.calendarId,
         notes: goal.notes ?? undefined,
         kind: goal.kind,
@@ -174,7 +217,16 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
     }
 
     return map;
-  }, [tasks, recurringTasks, calendarEntries, selectedCalendarIds, year, month, user.userId]);
+  }, [
+    scopedTasks,
+    scopedRecurring,
+    calendarEntries,
+    selectedCalendarId,
+    calendarById,
+    year,
+    month,
+    user.userId,
+  ]);
 
   // ── Calendar grid days ───────────────────────────────────────────────────
 
@@ -211,12 +263,22 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   async function createCalendar() {
     if (!newCalendarName.trim()) return;
     setCreatingCalendar(true);
+    setCreateCalendarError(null);
     try {
-      await fetch(`/api/t/${slug}/calendars`, {
+      const res = await fetch(`/api/t/${slug}/calendars`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCalendarName.trim(), color: newCalendarColor, type: newCalendarType }),
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCreateCalendarError(typeof json?.error === "string" ? json.error : "Could not create calendar");
+        return;
+      }
+      setAddCalendarOpen(false);
+      setNewCalendarName("");
+      setNewCalendarColor("#6366f1");
+      setNewCalendarType("PERSONAL");
       window.location.reload();
     } finally {
       setCreatingCalendar(false);
@@ -224,17 +286,18 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   }
 
   async function createGoal() {
-    if (!goalCalendarId || !goalTitle.trim() || !goalDate) return;
+    if (!selectedCalendarId || !goalTitle.trim() || !goalDate) return;
+    const calColor = selectedCalendar?.color ?? "#22c55e";
     setCreatingGoal(true);
     try {
-      await fetch(`/api/t/${slug}/calendars/${goalCalendarId}/entries`, {
+      await fetch(`/api/t/${slug}/calendars/${selectedCalendarId}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: goalTitle.trim(),
           notes: goalNotes.trim() || null,
           kind: goalKind,
-          color: goalColor,
+          color: calColor,
           startAt: new Date(`${goalDate}T09:00:00`).toISOString(),
         }),
       });
@@ -280,24 +343,28 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
             Calendar
           </h1>
           <p className="text-surface-400 text-sm mt-0.5">
-            Tasks and recurring schedules
+            <span className="text-surface-300">Workspace</span> shows team tasks, recurring work, and shared goals.{" "}
+            <span className="text-surface-300">Personal</span> shows only your tasks and that calendar&apos;s goals.
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setTopPanelCollapsed((v) => !v)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-surface-700 text-surface-300 hover:text-surface-100 hover:bg-surface-800 transition-all"
-            title={topPanelCollapsed ? "Expand calendar controls" : "Collapse calendar controls"}
+            type="button"
+            onClick={() => {
+              setCreateCalendarError(null);
+              setAddCalendarOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white transition-colors"
           >
-            {topPanelCollapsed ? <PanelTopOpen className="w-3.5 h-3.5" /> : <PanelTopClose className="w-3.5 h-3.5" />}
-            {topPanelCollapsed ? "Expand controls" : "Collapse controls"}
+            <Plus className="w-3.5 h-3.5" />
+            Add calendar
           </button>
-          {/* View toggle */}
           <div className="flex bg-surface-800 border border-surface-700 rounded-xl p-1">
             {(["month", "week"] as const).map((v) => (
               <button
                 key={v}
+                type="button"
                 onClick={() => setView(v)}
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
@@ -311,98 +378,156 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         </div>
       </div>
 
-      {!topPanelCollapsed && (
-        <>
-          {/* Month navigator */}
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => setCurrentDate((d) => subMonths(d, 1))}
-              className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-semibold text-surface-100">
-              {format(currentDate, "MMMM yyyy")}
-            </h2>
-            <button
-              onClick={() => setCurrentDate((d) => addMonths(d, 1))}
-              className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="bg-surface-800 border border-surface-700 rounded-2xl p-3 space-y-3">
+      {/* Single-select calendar focus — color matches goals below */}
+      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-3 sm:p-4">
+        <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider mb-2">Focus calendar</p>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-surface-400 mr-1">Calendars:</p>
           {calendars.map((c) => {
-            const on = selectedCalendarIds.includes(c.id);
+            const selected = c.id === selectedCalendarId;
             const canDelete = c.type === "PERSONAL" && c.ownerUserId === user.userId;
             return (
-              <div key={c.id} className={cn("inline-flex items-center rounded-lg text-xs border", on ? "text-white" : "text-surface-400 border-surface-600")} style={on ? { backgroundColor: c.color + "55", borderColor: c.color + "aa" } : undefined}>
+              <div
+                key={c.id}
+                className={cn(
+                  "inline-flex items-center rounded-full text-xs border-2 transition-all",
+                  selected ? "shadow-md" : "border-surface-600 text-surface-400 hover:border-surface-500"
+                )}
+                style={
+                  selected
+                    ? {
+                        backgroundColor: `${c.color}28`,
+                        borderColor: c.color,
+                        color: "var(--tw-prose-invert, #f8fafc)",
+                      }
+                    : undefined
+                }
+              >
                 <button
-                  onClick={() =>
-                    setSelectedCalendarIds((prev) =>
-                      on ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                    )
-                  }
-                  className="px-2.5 py-1"
-                  title={on ? "Hide calendar" : "Show calendar"}
+                  type="button"
+                  onClick={() => setSelectedCalendarId(c.id)}
+                  className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full font-medium"
+                  title={`Show only goals on ${calendarLabel(c)}`}
                 >
-                  {c.name}
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white/20" style={{ backgroundColor: c.color }} />
+                  <span className="truncate max-w-[140px] sm:max-w-[200px]">{calendarLabel(c)}</span>
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-md font-semibold",
+                      selected ? "bg-black/25 text-surface-100" : "bg-surface-700 text-surface-400"
+                    )}
+                  >
+                    {calendarTypeLabel(c.type)}
+                  </span>
                 </button>
                 {canDelete && (
                   <button
+                    type="button"
                     onClick={() => void deleteCalendar(c)}
                     disabled={deletingCalendarId === c.id}
-                    className="px-1.5 py-1 border-l border-surface-600/60 hover:text-red-300 disabled:opacity-40"
+                    className="pr-2 py-1.5 text-surface-500 hover:text-red-400 disabled:opacity-40"
                     title="Delete personal calendar"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
             );
           })}
         </div>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div className="rounded-xl border border-surface-700 p-3 space-y-2">
-            <p className="text-xs font-semibold text-surface-400 uppercase">New Calendar</p>
-            <input value={newCalendarName} onChange={(e) => setNewCalendarName(e.target.value)} placeholder="Personal calendar name" className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm" />
-            <div className="flex items-center gap-2">
-              <select value={newCalendarType} onChange={(e) => setNewCalendarType(e.target.value as "PERSONAL" | "ORG")} className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs">
-                <option value="PERSONAL">Personal</option>
-                {(user.isSuperAdmin || user.level === 1) && <option value="ORG">Org shared</option>}
-              </select>
-              <input type="color" value={newCalendarColor} onChange={(e) => setNewCalendarColor(e.target.value)} className="w-9 h-9 rounded border border-surface-700 bg-surface-900" />
-              <button onClick={createCalendar} disabled={creatingCalendar || !newCalendarName.trim()} className="ml-auto px-3 py-2 rounded-lg bg-primary-600 text-xs font-semibold disabled:opacity-40">
-                {creatingCalendar ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </div>
-          <div className="rounded-xl border border-surface-700 p-3 space-y-2">
-            <p className="text-xs font-semibold text-surface-400 uppercase">New Goal / Milestone</p>
-            <input value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} placeholder="Goal title" className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm" />
-            <textarea value={goalNotes} onChange={(e) => setGoalNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm" />
-            <div className="flex items-center gap-2 flex-wrap">
-              <select value={goalCalendarId} onChange={(e) => setGoalCalendarId(e.target.value)} className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs">
-                {calendars.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <select value={goalKind} onChange={(e) => setGoalKind(e.target.value as "GOAL" | "MILESTONE")} className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs">
-                <option value="GOAL">Goal</option>
-                <option value="MILESTONE">Milestone</option>
-              </select>
-              <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs" />
-              <input type="color" value={goalColor} onChange={(e) => setGoalColor(e.target.value)} className="w-9 h-9 rounded border border-surface-700 bg-surface-900" />
-              <button onClick={createGoal} disabled={creatingGoal || !goalTitle.trim() || !goalCalendarId} className="ml-auto px-3 py-2 rounded-lg bg-emerald-600 text-xs font-semibold disabled:opacity-40">
-                {creatingGoal ? "Saving..." : "Add"}
-              </button>
-            </div>
+        {selectedCalendar && (
+          <p className="text-xs text-surface-500 mt-3">
+            Goals use this calendar&apos;s color (
+            <span className="inline-flex items-center gap-1 align-middle">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedCalendar.color }} />
+              <span className="font-mono text-[11px]">{selectedCalendar.color}</span>
+            </span>
+            ).{" "}
+            {workspaceMode ? (
+              <>Team tasks and recurring schedules are included.</>
+            ) : (
+              <>Only tasks assigned to you are shown; switch to Workspace for the full team.</>
+            )}
+          </p>
+        )}
+      </div>
+
+      {/* Month navigator */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setCurrentDate((d) => subMonths(d, 1))}
+          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-lg font-semibold text-surface-100">{format(currentDate, "MMMM yyyy")}</h2>
+        <button
+          type="button"
+          onClick={() => setCurrentDate((d) => addMonths(d, 1))}
+          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Add goal — tied to focused calendar color */}
+      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-surface-300 uppercase tracking-wide">
+            Add goal / milestone
+            {selectedCalendar ? (
+              <span className="font-normal text-surface-500 normal-case ml-2">
+                on <span className="text-surface-300">{calendarLabel(selectedCalendar)}</span>
+              </span>
+            ) : null}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-surface-500">
+            <span>Preview</span>
+            <span
+              className="h-6 w-14 rounded-lg border border-surface-600 shadow-inner"
+              style={{ backgroundColor: selectedCalendar?.color ?? "#22c55e" }}
+            />
           </div>
         </div>
-          </div>
-        </>
-      )}
+        <input
+          value={goalTitle}
+          onChange={(e) => setGoalTitle(e.target.value)}
+          placeholder="Title"
+          className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+        />
+        <textarea
+          value={goalNotes}
+          onChange={(e) => setGoalNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          rows={2}
+          className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={goalKind}
+            onChange={(e) => setGoalKind(e.target.value as "GOAL" | "MILESTONE")}
+            className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
+          >
+            <option value="GOAL">Goal</option>
+            <option value="MILESTONE">Milestone</option>
+          </select>
+          <input
+            type="date"
+            value={goalDate}
+            onChange={(e) => setGoalDate(e.target.value)}
+            className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => void createGoal()}
+            disabled={creatingGoal || !goalTitle.trim() || !selectedCalendarId}
+            className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-40 transition-colors"
+            style={{ backgroundColor: selectedCalendar?.color ?? "#059669" }}
+          >
+            {creatingGoal ? "Saving…" : "Add"}
+          </button>
+        </div>
+      </div>
 
       {view === "month" ? (
         <div className="space-y-4">
@@ -648,6 +773,103 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         />
       )}
 
+      {/* Add calendar modal */}
+      {addCalendarOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-[1px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-cal-title"
+          onClick={() => {
+            if (!creatingCalendar) setAddCalendarOpen(false);
+          }}
+        >
+          <div
+            className="bg-surface-800 border border-surface-700 rounded-2xl p-5 max-w-md w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h2 id="add-cal-title" className="text-lg font-semibold text-surface-100">
+                  New calendar
+                </h2>
+                <p className="text-xs text-surface-500 mt-1">
+                  Pick a color once — goals and milestones on this calendar use it. Personal is yours alone; Workspace is
+                  shared with the whole company (admins only, one per workspace).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!creatingCalendar) setAddCalendarOpen(false);
+                }}
+                className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {createCalendarError && <p className="text-xs text-red-400 mb-3">{createCalendarError}</p>}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-surface-500 block mb-1">Name</label>
+                <input
+                  value={newCalendarName}
+                  onChange={(e) => setNewCalendarName(e.target.value)}
+                  placeholder="e.g. Product roadmap"
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-surface-500 block mb-1">Type</label>
+                <select
+                  value={newCalendarType}
+                  onChange={(e) => setNewCalendarType(e.target.value as "PERSONAL" | "ORG")}
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="PERSONAL">Personal (only you)</option>
+                  {(user.isSuperAdmin || user.level === 1) && (
+                    <option value="ORG">Workspace / shared (company-wide)</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-surface-500 block mb-1">Color</label>
+                <p className="text-[11px] text-surface-500 mb-2">Shown on the grid and in the day list for this calendar&apos;s goals.</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={newCalendarColor}
+                    onChange={(e) => setNewCalendarColor(e.target.value)}
+                    className="w-12 h-12 rounded-lg border border-surface-700 bg-surface-900 cursor-pointer"
+                  />
+                  <span className="text-xs font-mono text-surface-400">{newCalendarColor}</span>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!creatingCalendar) setAddCalendarOpen(false);
+                  }}
+                  disabled={creatingCalendar}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-surface-400 hover:bg-surface-700 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void createCalendar()}
+                  disabled={creatingCalendar || !newCalendarName.trim()}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary-600 text-white disabled:opacity-40"
+                >
+                  {creatingCalendar ? "Creating…" : "Create"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Legend */}
       <div className="flex items-center gap-4 flex-wrap text-[11px] text-surface-500">
         <div className="flex items-center gap-1.5">
@@ -667,8 +889,8 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
           Recurring
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded bg-emerald-500/30" />
-          Goals / milestones
+          <div className="w-2.5 h-2.5 rounded border border-emerald-500/50 bg-emerald-500/20" />
+          Goals / milestones (focused calendar)
         </div>
       </div>
     </div>

@@ -44,7 +44,10 @@ export interface User {
   id: string;
   companyId: string;
   roleLevelId: string;
-  parentId: string | null;
+  /** @deprecated Use reportingLinksAsSubordinate; kept for legacy POST bodies */
+  parentId?: string | null;
+  /** Managers this user reports to; sortOrder 0 = primary org line */
+  reportingLinksAsSubordinate?: { managerId: string; sortOrder: number }[];
   email: string;
   username: string;
   firstName: string;
@@ -64,7 +67,7 @@ export interface User {
   children?: UserBrief[];
   _count?: {
     assignedTasks: number;
-    children: number;
+    reportingLinksAsManager?: number;
   };
 }
 
@@ -218,7 +221,8 @@ export interface NewUserData {
   roleLevelId: string;
   roleLevelName: string;
   roleLevelLevel: number;
-  parentId: string;
+  parentId?: string;
+  managerIds?: string[];
   password?: string;
 }
 

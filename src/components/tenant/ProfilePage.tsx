@@ -1,7 +1,24 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Camera, Save, Key, Eye, EyeOff, User, Mail, AtSign, Shield, Phone, FileText } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import type { UiFontScale, UiTheme } from "@prisma/client";
+import {
+  Camera,
+  Save,
+  Key,
+  Eye,
+  EyeOff,
+  User,
+  Mail,
+  AtSign,
+  Shield,
+  Phone,
+  FileText,
+  Palette,
+  Sun,
+  Moon,
+  Type,
+} from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import Button from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -23,6 +40,8 @@ interface Props {
     phone: string | null;
     roleLevel: { name: string; color: string; level: number };
     isSuperAdmin: boolean;
+    uiTheme: UiTheme;
+    uiFontScale: UiFontScale;
   };
 }
 
@@ -46,6 +65,36 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  const [uiTheme, setUiTheme] = useState<UiTheme>(initialData.uiTheme);
+  const [uiFontScale, setUiFontScale] = useState<UiFontScale>(initialData.uiFontScale);
+  const [savingAppearance, setSavingAppearance] = useState(false);
+
+  useEffect(() => {
+    setUiTheme(initialData.uiTheme);
+    setUiFontScale(initialData.uiFontScale);
+  }, [initialData.uiTheme, initialData.uiFontScale]);
+
+  const saveAppearance = async (patch: Partial<{ uiTheme: UiTheme; uiFontScale: UiFontScale }>) => {
+    setSavingAppearance(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        toast.error("Could not save appearance");
+        return;
+      }
+      if (patch.uiTheme !== undefined) setUiTheme(patch.uiTheme);
+      if (patch.uiFontScale !== undefined) setUiFontScale(patch.uiFontScale);
+      toast.success("Appearance updated");
+      router.refresh();
+    } finally {
+      setSavingAppearance(false);
+    }
+  };
 
   // ── Avatar upload ──────────────────────────────────────────────────────────
 
@@ -141,15 +190,95 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
-          <User className="w-5 h-5 text-primary-400" />
+          <User className="w-5 h-5 text-primary-500 dark:text-primary-400" />
           My Profile
         </h1>
-        <p className="text-surface-400 text-sm mt-0.5">Manage your account details and password</p>
+        <p className="text-surface-500 dark:text-surface-400 text-sm mt-0.5">
+          Manage your account details, appearance, and password
+        </p>
+      </div>
+
+      {/* Appearance */}
+      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6 space-y-5">
+        <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-2">
+          <Palette className="w-4 h-4 text-primary-500 dark:text-primary-400" />
+          Appearance
+        </h2>
+        <p className="text-xs text-surface-500 dark:text-surface-500">
+          Theme and text size apply across this workspace on all your devices.
+        </p>
+
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-surface-600 dark:text-surface-400 flex items-center gap-1.5">
+            <Sun className="w-3.5 h-3.5 opacity-80" /> Theme
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={savingAppearance}
+              onClick={() => saveAppearance({ uiTheme: "LIGHT" })}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors",
+                uiTheme === "LIGHT"
+                  ? "border-primary-500 bg-primary-500/15 text-primary-800 dark:text-primary-200"
+                  : "border-surface-600/80 bg-surface-750/50 text-surface-600 hover:bg-surface-700/50 dark:border-surface-600 dark:text-surface-400"
+              )}
+            >
+              <Sun className="w-4 h-4" />
+              Light
+            </button>
+            <button
+              type="button"
+              disabled={savingAppearance}
+              onClick={() => saveAppearance({ uiTheme: "DARK" })}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors",
+                uiTheme === "DARK"
+                  ? "border-primary-500 bg-primary-500/15 text-primary-800 dark:text-primary-200"
+                  : "border-surface-600/80 bg-surface-750/50 text-surface-600 hover:bg-surface-700/50 dark:border-surface-600 dark:text-surface-400"
+              )}
+            >
+              <Moon className="w-4 h-4" />
+              Dark
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-surface-600 dark:text-surface-400 flex items-center gap-1.5">
+            <Type className="w-3.5 h-3.5 opacity-80" /> Text size
+          </span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(
+              [
+                ["SMALL", "Small"],
+                ["MEDIUM", "Medium"],
+                ["LARGE", "Large"],
+                ["XL", "Extra large"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                disabled={savingAppearance}
+                onClick={() => saveAppearance({ uiFontScale: value })}
+                className={cn(
+                  "rounded-xl border px-2 py-2 text-center text-xs font-medium transition-colors sm:text-sm",
+                  uiFontScale === value
+                    ? "border-primary-500 bg-primary-500/15 text-primary-800 dark:text-primary-200"
+                    : "border-surface-600/80 bg-surface-750/50 text-surface-600 hover:bg-surface-700/50 dark:border-surface-600 dark:text-surface-400"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Avatar section */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-surface-300 mb-4">Profile Picture</h2>
+        <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">Profile Picture</h2>
         <div className="flex items-center gap-5">
           <div className="relative">
             <Avatar
@@ -179,7 +308,7 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
             />
           </div>
           <div>
-            <p className="text-sm font-semibold text-surface-100">
+            <p className="text-sm font-semibold text-surface-800 dark:text-surface-100">
               {firstName} {lastName}
             </p>
             <div
@@ -193,7 +322,7 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
               {initialData.roleLevel.name}
               {initialData.isSuperAdmin && <Shield className="w-3 h-3" />}
             </div>
-            <p className="text-[11px] text-surface-500 mt-1">
+            <p className="text-[11px] text-surface-500 dark:text-surface-500 mt-1">
               JPEG, PNG, GIF or WebP · max 3 MB
             </p>
             {avatarUrl && (
@@ -217,7 +346,7 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
 
       {/* Profile info */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-surface-300">Personal Information</h2>
+        <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300">Personal Information</h2>
 
         <div className="grid grid-cols-2 gap-3">
           <Input
@@ -243,7 +372,7 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
         />
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-surface-300 flex items-center gap-1.5">
+          <label className="text-sm font-medium text-surface-600 dark:text-surface-300 flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5 text-surface-500" /> Bio
           </label>
           <Textarea
@@ -259,17 +388,17 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
         {/* Read-only fields */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-surface-300">Email</label>
+            <label className="text-sm font-medium text-surface-600 dark:text-surface-300">Email</label>
             <div className="flex items-center gap-2 bg-surface-750 border border-surface-600 rounded-xl px-4 py-2.5">
               <Mail className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
-              <span className="text-sm text-surface-400 truncate">{initialData.email}</span>
+              <span className="text-sm text-surface-600 dark:text-surface-400 truncate">{initialData.email}</span>
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-surface-300">Username</label>
+            <label className="text-sm font-medium text-surface-600 dark:text-surface-300">Username</label>
             <div className="flex items-center gap-2 bg-surface-750 border border-surface-600 rounded-xl px-4 py-2.5">
               <AtSign className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
-              <span className="text-sm text-surface-400 truncate">{initialData.username}</span>
+              <span className="text-sm text-surface-600 dark:text-surface-400 truncate">{initialData.username}</span>
             </div>
           </div>
         </div>
@@ -283,8 +412,8 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
 
       {/* Change password */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-          <Key className="w-4 h-4 text-surface-400" /> Change Password
+        <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-2">
+          <Key className="w-4 h-4 text-surface-500 dark:text-surface-400" /> Change Password
         </h2>
 
         <Input

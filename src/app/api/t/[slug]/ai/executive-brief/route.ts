@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isExecutiveDashboardUser } from "@/lib/utils";
-import { getSubtreeIds } from "@/lib/subtreeWorkload";
+import { fetchReportingLinksForCompany } from "@/lib/reportingLinks";
+import { getSubtreeIds, getDirectReportIds } from "@/lib/subtreeWorkload";
 import { buildExecutiveBriefPrompt, executiveBriefJsonSchema } from "@/lib/ai/executiveBriefPrompt";
 import { generateGeminiJson } from "@/lib/ai/gemini";
 import { isUserAiEnabled } from "@/lib/ai/entitlement";
@@ -123,20 +124,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const next7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const users = await prisma.user.findMany({
-    where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      parentId: true,
-      roleLevel: { select: { name: true, level: true } },
-    },
-  });
+  const [users, lr] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: company.id, isActive: true, isTenantBootstrapAccount: false },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        roleLevel: { select: { name: true, level: true } },
+      },
+    }),
+    fetchReportingLinksForCompany(prisma, company.id),
+  ]);
 
-  const refs = users.map((u) => ({ id: u.id, parentId: u.parentId }));
-  const visibleIds = getSubtreeIds(refs, viewer.userId);
-  const directReportIds = users.filter((u) => u.parentId === viewer.userId).map((u) => u.id);
+  const visibleIds = getSubtreeIds(lr, viewer.userId);
+  const directReportIds = getDirectReportIds(lr, viewer.userId);
 
   const statusConfigs = await prisma.taskStatusConfig.findMany({
     where: { companyId: company.id },

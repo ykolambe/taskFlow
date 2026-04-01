@@ -38,8 +38,8 @@ export default function BillingStatusBanner({ slug }: { slug: string }) {
     return (
       <div className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-3">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-2 text-sm text-amber-100">
-            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+          <div className="flex items-start gap-2 text-sm text-amber-950 dark:text-amber-100">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
             <p>
               <span className="font-semibold">Subscription inactive or ended.</span>{" "}
               {isAdmin
@@ -50,7 +50,7 @@ export default function BillingStatusBanner({ slug }: { slug: string }) {
           {isAdmin && (
             <Link
               href={`/t/${encodeURIComponent(slug)}/billing`}
-              className="inline-flex items-center justify-center rounded-lg bg-amber-500 hover:bg-amber-400 text-surface-950 text-sm font-semibold px-4 py-2 shrink-0"
+              className="inline-flex items-center justify-center rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold px-4 py-2 shrink-0"
             >
               View billing & upgrade
             </Link>
@@ -64,8 +64,8 @@ export default function BillingStatusBanner({ slug }: { slug: string }) {
     return (
       <div className="shrink-0 border-b border-primary-500/30 bg-primary-500/10 px-4 py-3">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-2 text-sm text-primary-100">
-            <Sparkles className="w-5 h-5 shrink-0 text-primary-400 mt-0.5" />
+          <div className="flex items-start gap-2 text-sm text-primary-950 dark:text-primary-100">
+            <Sparkles className="w-5 h-5 shrink-0 text-primary-600 dark:text-primary-400 mt-0.5" />
             <p>
               <span className="font-semibold">You are on the Free plan.</span> Upgrade to Pro for more seats, team
               chat, recurring tasks, and AI add-ons.
