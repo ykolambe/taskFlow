@@ -29,6 +29,18 @@ import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
 
 const IDEA_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6"];
+const IDEA_COLOR_LABELS: Record<string, string> = {
+  "#6366f1": "Indigo",
+  "#8b5cf6": "Purple",
+  "#ec4899": "Pink",
+  "#f43f5e": "Rose",
+  "#f97316": "Orange",
+  "#eab308": "Yellow",
+  "#22c55e": "Green",
+  "#14b8a6": "Teal",
+  "#06b6d4": "Cyan",
+  "#3b82f6": "Blue",
+};
 
 const STATUS_CONFIG: Record<IdeaStatus, { label: string; icon: React.ElementType; className: string }> = {
   IDEA: { label: "Idea", icon: Lightbulb, className: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
@@ -527,7 +539,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
           </select>
           <select value={filterColor} onChange={(e) => setFilterColor(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
             <option value="ALL">All colors</option>
-            {IDEA_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+            {IDEA_COLORS.map((c) => <option key={c} value={c}>{IDEA_COLOR_LABELS[c] ?? c}</option>)}
           </select>
           {(["ALL", "IDEA", "THINKING", "CONVERTED", "DROPPED"] as const).map((s) => (
             <button key={s} onClick={() => setFilterStatus(s)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border", filterStatus === s ? "bg-primary-500/20 text-primary-400 border-primary-500/40" : "bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200")}>

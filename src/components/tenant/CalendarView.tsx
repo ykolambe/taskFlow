@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import {
-  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus, Target, Flag, Check,
+  ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus, Target, Flag, Check, Trash2, PanelTopClose, PanelTopOpen,
 } from "lucide-react";
 import { TenantTokenPayload } from "@/lib/auth";
 import { Task, RecurringTask, CalendarCollection, CalendarEntry } from "@/types";
@@ -108,6 +108,8 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   const [goalColor, setGoalColor] = useState("#22c55e");
   const [goalDate, setGoalDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [creatingGoal, setCreatingGoal] = useState(false);
+  const [deletingCalendarId, setDeletingCalendarId] = useState<string | null>(null);
+  const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -241,6 +243,19 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
     }
   }
 
+  async function deleteCalendar(calendar: CalendarCollection) {
+    if (calendar.type !== "PERSONAL" || calendar.ownerUserId !== user.userId) return;
+    const ok = window.confirm(`Delete personal calendar "${calendar.name}"? This will also delete its goals and milestones.`);
+    if (!ok) return;
+    setDeletingCalendarId(calendar.id);
+    try {
+      await fetch(`/api/t/${slug}/calendars/${calendar.id}`, { method: "DELETE" });
+      window.location.reload();
+    } finally {
+      setDeletingCalendarId(null);
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
@@ -256,6 +271,14 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setTopPanelCollapsed((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-surface-700 text-surface-300 hover:text-surface-100 hover:bg-surface-800 transition-all"
+            title={topPanelCollapsed ? "Expand calendar controls" : "Collapse calendar controls"}
+          >
+            {topPanelCollapsed ? <PanelTopOpen className="w-3.5 h-3.5" /> : <PanelTopClose className="w-3.5 h-3.5" />}
+            {topPanelCollapsed ? "Expand controls" : "Collapse controls"}
+          </button>
           {/* View toggle */}
           <div className="flex bg-surface-800 border border-surface-700 rounded-xl p-1">
             {(["month", "week"] as const).map((v) => (
@@ -274,43 +297,57 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         </div>
       </div>
 
-      {/* Month navigator */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setCurrentDate((d) => subMonths(d, 1))}
-          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <h2 className="text-lg font-semibold text-surface-100">
-          {format(currentDate, "MMMM yyyy")}
-        </h2>
-        <button
-          onClick={() => setCurrentDate((d) => addMonths(d, 1))}
-          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
+      {!topPanelCollapsed && (
+        <>
+          {/* Month navigator */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setCurrentDate((d) => subMonths(d, 1))}
+              className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-surface-100">
+              {format(currentDate, "MMMM yyyy")}
+            </h2>
+            <button
+              onClick={() => setCurrentDate((d) => addMonths(d, 1))}
+              className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
 
-      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-3 space-y-3">
+          <div className="bg-surface-800 border border-surface-700 rounded-2xl p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs text-surface-400 mr-1">Calendars:</p>
           {calendars.map((c) => {
             const on = selectedCalendarIds.includes(c.id);
+            const canDelete = c.type === "PERSONAL" && c.ownerUserId === user.userId;
             return (
-              <button
-                key={c.id}
-                onClick={() =>
-                  setSelectedCalendarIds((prev) =>
-                    on ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                  )
-                }
-                className={cn("px-2.5 py-1 rounded-lg text-xs border", on ? "text-white" : "text-surface-400 border-surface-600")}
-                style={on ? { backgroundColor: c.color + "55", borderColor: c.color + "aa" } : undefined}
-              >
-                {c.name}
-              </button>
+              <div key={c.id} className={cn("inline-flex items-center rounded-lg text-xs border", on ? "text-white" : "text-surface-400 border-surface-600")} style={on ? { backgroundColor: c.color + "55", borderColor: c.color + "aa" } : undefined}>
+                <button
+                  onClick={() =>
+                    setSelectedCalendarIds((prev) =>
+                      on ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                    )
+                  }
+                  className="px-2.5 py-1"
+                  title={on ? "Hide calendar" : "Show calendar"}
+                >
+                  {c.name}
+                </button>
+                {canDelete && (
+                  <button
+                    onClick={() => void deleteCalendar(c)}
+                    disabled={deletingCalendarId === c.id}
+                    className="px-1.5 py-1 border-l border-surface-600/60 hover:text-red-300 disabled:opacity-40"
+                    title="Delete personal calendar"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -349,7 +386,9 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
             </div>
           </div>
         </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {view === "month" ? (
         <div className="space-y-4">
