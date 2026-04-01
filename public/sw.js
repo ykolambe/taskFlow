@@ -1,7 +1,7 @@
 /* global self, caches, fetch */
 
 const STATIC_CACHE = "taskflow-static-v1";
-const RUNTIME_CACHE = "taskflow-runtime-v2";
+const RUNTIME_CACHE = "taskflow-runtime-v3";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -30,11 +30,13 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-async function networkFirst(request) {
+async function networkFirst(request, opts) {
+  const cacheWrites = opts?.cacheWrites !== false;
   const cache = await caches.open(RUNTIME_CACHE);
   try {
-    const response = await fetch(request);
-    if (request.method === "GET" && response && response.ok) {
+    // credentials: "include" helps some PWA/WebView stacks send session cookies on SW-mediated fetches
+    const response = await fetch(request, { credentials: "include" });
+    if (cacheWrites && request.method === "GET" && response && response.ok) {
       cache.put(request, response.clone());
     }
     return response;
@@ -57,12 +59,18 @@ self.addEventListener("fetch", (event) => {
     request.mode === "navigate" &&
     (url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/"))
   ) {
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request, { credentials: "include" }));
     return;
   }
 
-  // Keep auth-sensitive app/API routes network-first (non-navigate GETs may still cache).
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/")) {
+  // Never cache API GETs — avoids stale JSON/auth-related responses in PWA.
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(networkFirst(request, { cacheWrites: false }));
+    return;
+  }
+
+  // App HTML/RSC: network-first with cache (non-navigate GETs only).
+  if (url.pathname.startsWith("/t/") || url.pathname.startsWith("/platform/")) {
     event.respondWith(networkFirst(request));
     return;
   }

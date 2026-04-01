@@ -30,21 +30,8 @@ export default async function TeamServerPage({
     orderBy: [{ roleLevel: { level: "asc" } }, { firstName: "asc" }],
   });
 
-  // Get IDs visible to current user
-  function getSubtreeIdsLocal(userId: string): string[] {
-    const children = allUsers.filter((u) => u.parentId === userId).map((u) => u.id);
-    return [userId, ...children.flatMap((id) => getSubtreeIdsLocal(id))];
-  }
-  // Also include ancestors
-  function getAncestorIds(userId: string): string[] {
-    const u = allUsers.find((x) => x.id === userId);
-    if (!u?.parentId) return [];
-    return [u.parentId, ...getAncestorIds(u.parentId)];
-  }
-
-  const visibleIds = new Set([...getSubtreeIdsLocal(user.userId), ...getAncestorIds(user.userId)]);
-  // Super admins manage the whole org: full member list, parent pickers, and direct add without subtree limits.
-  const visibleUsers = user.isSuperAdmin ? allUsers : allUsers.filter((u) => visibleIds.has(u.id));
+  // Full roster (same scope as Org Chart). TeamPage still limits remove/edit actions by hierarchy.
+  const visibleUsers = allUsers;
 
   const subtreeRefs = allUsers.map((u) => ({ id: u.id, parentId: u.parentId }));
   const directReportIds = getDirectReportIds(subtreeRefs, user.userId);

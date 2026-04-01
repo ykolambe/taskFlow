@@ -363,7 +363,7 @@ export default function TeamPage({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-surface-100">Team</h1>
-          <p className="text-surface-400 text-xs mt-0.5">{users.length} members visible</p>
+          <p className="text-surface-400 text-xs mt-0.5">{users.length} team members</p>
         </div>
         <Button
           onClick={() => {
