@@ -93,28 +93,34 @@ export default function OrgChart({ orgTree, superAdmins = [], currentUserId, com
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 sm:px-6 py-4 border-b border-surface-200 dark:border-surface-800 flex items-center justify-between flex-shrink-0">
+      <div className="px-4 sm:px-6 py-4 border-b border-surface-200 dark:border-surface-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-surface-100">Org Chart</h1>
           <p className="text-slate-600 dark:text-surface-400 text-xs mt-0.5">{companyName} hierarchy</p>
+          <p className="text-slate-500 dark:text-surface-500 text-[11px] mt-1 sm:hidden">Scroll the chart and each row of peers horizontally when needed.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <button
-            onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-            className="p-2 bg-surface-100 dark:bg-surface-800 border border-surface-300 dark:border-surface-700 rounded-lg text-slate-600 dark:text-surface-400 hover:text-slate-900 dark:hover:text-surface-200 transition-all"
+            type="button"
+            onClick={() => setZoom(Math.max(0.4, zoom - 0.1))}
+            className="p-2 rounded-lg border transition-all bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-700 dark:hover:bg-surface-750 dark:hover:text-surface-100"
+            aria-label="Zoom out"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
-          <span className="text-xs text-slate-600 dark:text-surface-400 w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <span className="text-xs text-slate-700 dark:text-surface-300 w-12 text-center tabular-nums font-medium">{Math.round(zoom * 100)}%</span>
           <button
-            onClick={() => setZoom(Math.min(1.5, zoom + 0.1))}
-            className="p-2 bg-surface-100 dark:bg-surface-800 border border-surface-300 dark:border-surface-700 rounded-lg text-slate-600 dark:text-surface-400 hover:text-slate-900 dark:hover:text-surface-200 transition-all"
+            type="button"
+            onClick={() => setZoom(Math.min(1.6, zoom + 0.1))}
+            className="p-2 rounded-lg border transition-all bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-700 dark:hover:bg-surface-750 dark:hover:text-surface-100"
+            aria-label="Zoom in"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
           <button
+            type="button"
             onClick={() => setZoom(1)}
-            className="px-3 py-2 bg-surface-100 dark:bg-surface-800 border border-surface-300 dark:border-surface-700 rounded-lg text-xs text-slate-600 dark:text-surface-400 hover:text-slate-900 dark:hover:text-surface-200 transition-all"
+            className="px-3 py-2 rounded-lg text-xs font-medium border transition-all bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-700 dark:hover:bg-surface-750 dark:hover:text-surface-100"
           >
             Reset
           </button>
@@ -122,7 +128,7 @@ export default function OrgChart({ orgTree, superAdmins = [], currentUserId, com
       </div>
 
       {/* Chart */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto overscroll-x-contain touch-pan-x p-4 sm:p-6">
         <div
           className={cn(
             "org-tree org-tree-with-company flex flex-col items-center",

@@ -9,6 +9,7 @@ import { RoleLevel } from "@/types";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { copyToClipboard } from "@/lib/utils";
+import TenantScheduledPushPanel from "@/components/tenant/TenantScheduledPushPanel";
 
 interface Company {
   id: string;
@@ -643,6 +644,8 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
           </div>
         </div>
       )}
+
+      {user.isSuperAdmin && <TenantScheduledPushPanel slug={slug} />}
 
       {/* Role Levels */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-5">

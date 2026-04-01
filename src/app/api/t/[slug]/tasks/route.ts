@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchReportingLinksForCompany, getPrimarySubtreeIds } from "@/lib/reportingLinks";
+import {
+  buildTaskAssignedPayload,
+  isPushConfigured,
+  sendWebPushToUserIds,
+} from "@/lib/pushNotifications";
 
 const USER_SELECT = {
   id: true, firstName: true, lastName: true, avatarUrl: true,
@@ -149,6 +154,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           },
         });
       }
+    }
+
+    if (finalAssigneeId !== user.userId && isPushConfigured()) {
+      const assignerName = `${user.firstName} ${user.lastName}`.trim() || user.email;
+      void sendWebPushToUserIds(
+        [finalAssigneeId],
+        buildTaskAssignedPayload(slug, title, assignerName, task.id)
+      );
     }
 
     return NextResponse.json({ success: true, data: task });

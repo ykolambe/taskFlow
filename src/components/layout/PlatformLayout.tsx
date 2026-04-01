@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronRight,
   Zap,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/platform/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/platform/companies", label: "Companies",  icon: Building2    },
   { href: "/platform/billing",   label: "Billing",    icon: CreditCard   },
+  { href: "/platform/push",     label: "Push",       icon: Bell         },
 ];
 
 export default function PlatformLayout({ children, user }: PlatformLayoutProps) {

@@ -30,6 +30,49 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("push", (event) => {
+  let data = { title: "TaskFlow", body: "", url: "/" };
+  try {
+    if (event.data) {
+      const j = event.data.json();
+      data = { title: data.title, body: data.body, url: data.url, ...j };
+    }
+  } catch {
+    const t = event.data && event.data.text();
+    if (t) data.body = t;
+  }
+  const path = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/";
+  event.waitUntil(
+    self.registration.showNotification(data.title || "TaskFlow", {
+      body: data.body || "",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: data.tag || "taskflow-default",
+      data: { url: path },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const raw = event.notification.data && event.notification.data.url;
+  const path = typeof raw === "string" && raw.startsWith("/") ? raw : "/";
+  const targetHref = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const c of clientList) {
+        if (c.url && new URL(c.url).origin === self.location.origin && "focus" in c) {
+          if ("navigate" in c && typeof c.navigate === "function") {
+            return c.navigate(targetHref).then((client) => client && client.focus());
+          }
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(targetHref);
+    })
+  );
+});
+
 async function networkFirst(request) {
   const cache = await caches.open(RUNTIME_CACHE);
   try {

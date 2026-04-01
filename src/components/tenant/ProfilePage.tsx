@@ -26,6 +26,7 @@ import { TenantTokenPayload } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import PushNotificationSettings from "@/components/tenant/PushNotificationSettings";
 
 interface Props {
   user: TenantTokenPayload;
@@ -274,6 +275,11 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-6">
+        <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">Notifications</h2>
+        <PushNotificationSettings slug={slug} />
       </div>
 
       {/* Avatar section */}

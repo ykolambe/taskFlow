@@ -117,6 +117,25 @@ input:-webkit-autofill:focus {
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* Keep each level’s siblings on one row on narrow screens; pan horizontally instead of wrapping. */
+@media (max-width: 639px) {
+  .org-tree ul {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: visible;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    scrollbar-width: thin;
+  }
+  .org-tree li {
+    flex: 0 0 auto;
+  }
+}
 .org-tree ul::before {
   content: "";
   position: absolute;

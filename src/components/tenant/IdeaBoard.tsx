@@ -17,8 +17,6 @@ import {
   Search,
   Tag,
   FileText,
-  PanelTopClose,
-  PanelTopOpen,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -224,7 +222,16 @@ function IdeaCard({ idea, onEdit, onDelete, onPin, onStatusChange, onConvert }: 
   );
 }
 
-function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body: string; color: string; tags: IdeaTag[] }) => void; knownTags: IdeaTag[]; }) {
+function QuickAdd({
+  onAdd,
+  knownTags,
+  bare,
+}: {
+  onAdd: (payload: { title: string; body: string; color: string; tags: IdeaTag[] }) => void;
+  knownTags: IdeaTag[];
+  /** Omit outer card chrome (e.g. when shown inside a modal). */
+  bare?: boolean;
+}) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [color, setColor] = useState(IDEA_COLORS[0]);
@@ -260,7 +267,7 @@ function QuickAdd({ onAdd, knownTags }: { onAdd: (payload: { title: string; body
   };
 
   return (
-    <div className="p-4 bg-surface-800 border border-surface-700 rounded-2xl space-y-3">
+    <div className={cn("space-y-3", !bare && "p-4 bg-surface-800 border border-surface-700 rounded-2xl")}>
       <div className="flex items-center gap-2">
         <Lightbulb className="w-4 h-4 text-primary-400 flex-shrink-0" />
         <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="Dump idea headline... (optional if details below)" className="flex-1 bg-transparent text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none min-w-0" />
@@ -335,7 +342,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   /** Page ids to append as formatted sections in the task description */
   const [convertSelectedPageIds, setConvertSelectedPageIds] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
-  const [creatorCollapsed, setCreatorCollapsed] = useState(false);
+  const [dumpIdeaOpen, setDumpIdeaOpen] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [loadingLinkedTasks, setLoadingLinkedTasks] = useState(false);
 
@@ -387,6 +394,7 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
     if (!res.ok) { toast.error(data.error || "Failed"); return; }
     setIdeas((prev) => [normalizeIdea(data.data), ...prev]);
     toast.success("Idea added!");
+    setDumpIdeaOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -555,45 +563,43 @@ export default function IdeaBoard({ user, slug, initialIdeas, assignableUsers }:
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 sm:px-6 py-4 border-b border-surface-800 bg-surface-900 flex-shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-amber-400" /> Idea Board</h1>
             <p className="text-surface-400 text-xs mt-0.5">Capture headlines, tag them, expand into pages, then convert cleanly into tasks.</p>
           </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setCreatorCollapsed((v) => !v)}
-            title={creatorCollapsed ? "Expand creation panel" : "Collapse creation panel"}
-          >
-            {creatorCollapsed ? <PanelTopOpen className="w-4 h-4 mr-1" /> : <PanelTopClose className="w-4 h-4 mr-1" />}
-            {creatorCollapsed ? "Expand" : "Collapse"}
+          <Button size="sm" className="w-full sm:w-auto shrink-0" onClick={() => setDumpIdeaOpen(true)} title="Add a new idea">
+            <Plus className="w-4 h-4 mr-1.5" /> Dump idea
           </Button>
         </div>
 
-        {!creatorCollapsed && <QuickAdd onAdd={handleQuickAdd} knownTags={knownTags} />}
-
-        <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <div className="relative flex-1 min-w-36">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
+        <div className="mt-4 space-y-2">
+          <div className="relative w-full min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500 pointer-events-none" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ideas, tags, pages..." className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 transition-all" />
           </div>
-          <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
-            <option value="ALL">All tags</option>
-            {knownTags.map((t) => <option key={`${t.name}-${t.color}`} value={t.name}>{t.name}</option>)}
-          </select>
-          <select value={filterColor} onChange={(e) => setFilterColor(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
-            <option value="ALL">All colors</option>
-            {IDEA_COLORS.map((c) => <option key={c} value={c}>{IDEA_COLOR_LABELS[c] ?? c}</option>)}
-          </select>
-          {(["ALL", "IDEA", "THINKING", "CONVERTED", "DROPPED"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border", filterStatus === s ? "bg-primary-500/20 text-primary-400 border-primary-500/40" : "bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200")}>
-              {s === "ALL" ? "All" : STATUS_CONFIG[s].label}
-              <span className="text-[10px] opacity-70">{counts[s]}</span>
-            </button>
-          ))}
+          <div className="flex sm:flex-wrap sm:gap-2 sm:overflow-visible items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 touch-pan-x">
+            <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="shrink-0 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300 max-w-[11rem]">
+              <option value="ALL">All tags</option>
+              {knownTags.map((t) => <option key={`${t.name}-${t.color}`} value={t.name}>{t.name}</option>)}
+            </select>
+            <select value={filterColor} onChange={(e) => setFilterColor(e.target.value)} className="shrink-0 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-300">
+              <option value="ALL">All colors</option>
+              {IDEA_COLORS.map((c) => <option key={c} value={c}>{IDEA_COLOR_LABELS[c] ?? c}</option>)}
+            </select>
+            {(["ALL", "IDEA", "THINKING", "CONVERTED", "DROPPED"] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setFilterStatus(s)} className={cn("shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border", filterStatus === s ? "bg-primary-500/20 text-primary-400 border-primary-500/40" : "bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200")}>
+                {s === "ALL" ? "All" : STATUS_CONFIG[s].label}
+                <span className="text-[10px] opacity-70">{counts[s]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      <Modal isOpen={dumpIdeaOpen} onClose={() => setDumpIdeaOpen(false)} title="Dump an idea" description="Quick headline, optional details and tags — refine later from the card." size="lg">
+        <QuickAdd onAdd={handleQuickAdd} knownTags={knownTags} bare />
+      </Modal>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
         {filtered.length === 0 ? (
