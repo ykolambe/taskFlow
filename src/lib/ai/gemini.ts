@@ -103,7 +103,29 @@ export async function generateGeminiJson<T>(options: GeminiGenerateOptions): Pro
       );
 
       if (!res.ok) {
-        throw new Error(`Gemini request failed (${res.status})`);
+        const errBody = await res.text();
+        let googleMessage = "";
+        try {
+          const parsed = JSON.parse(errBody) as { error?: { message?: string } };
+          googleMessage = parsed?.error?.message ?? "";
+        } catch {
+          /* ignore */
+        }
+        const logLine = [
+          "[Gemini]",
+          options.endpointTag ?? "generic",
+          options.companyId ? `company=${options.companyId}` : "",
+          `status=${res.status}`,
+          googleMessage ? `message=${googleMessage}` : `body=${errBody.slice(0, 500)}`,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        console.error(logLine);
+        throw new Error(
+          googleMessage
+            ? `Gemini request failed (${res.status}): ${googleMessage}`
+            : `Gemini request failed (${res.status})`
+        );
       }
 
       const json = geminiResponseSchema.parse(await res.json());

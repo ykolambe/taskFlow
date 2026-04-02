@@ -17,6 +17,10 @@ export interface Company {
   slug: string;
   logoUrl: string | null;
   domain: string | null;
+  /** Saved copy for Content Studio AI (optional). */
+  contentBrandBrief?: string | null;
+  contentBrandWebsite?: string | null;
+  contentBrandCompetitorNotes?: string | null;
   isActive: boolean;
   modules: string[];
   createdAt: string;
@@ -164,6 +168,8 @@ export interface CalendarCollection {
   type: CalendarType;
   /** When type is CHANNEL, e.g. LinkedIn vs Instagram */
   contentChannel?: string | null;
+  /** Preset platform id for AI (linkedin, instagram, …) */
+  contentPlatformPreset?: string | null;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;

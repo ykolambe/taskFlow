@@ -30,6 +30,12 @@ model Company {
   slug        String   @unique
   logoUrl     String?
   domain      String?
+  /// Free-form brand / audience description for Content Studio AI (e.g. coaching vertical, tone).
+  contentBrandBrief           String?
+  /// Primary public website URL; server may fetch text to ground idea generation.
+  contentBrandWebsite         String?
+  /// Optional competitor or reference URLs / notes (newline-separated URLs or prose).
+  contentBrandCompetitorNotes String?
   isActive    Boolean  @default(true)
   modules     String[] @default(["tasks", "team", "org", "approvals"])
   createdAt   DateTime @default(now())
@@ -279,6 +285,8 @@ model CalendarCollection {
   color       String       @default("#22c55e")
   type        CalendarType @default(PERSONAL)
   contentChannel String?
+  /// Readymade platform (linkedin, instagram, …) for AI format/tone; custom uses contentChannel label.
+  contentPlatformPreset String?
   isArchived  Boolean      @default(false)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt

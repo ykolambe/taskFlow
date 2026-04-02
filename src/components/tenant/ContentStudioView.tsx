@@ -11,6 +11,7 @@ import { format, isSameDay, parseISO } from "date-fns";
 import { TenantTokenPayload } from "@/lib/auth";
 import type { ContentEntryStatus } from "@/types";
 import { cn } from "@/lib/utils";
+import { CONTENT_PLATFORM_PRESETS, type ContentPlatformPresetId } from "@/lib/contentPlatformPresets";
 
 type UserBrief = {
   id: string;
@@ -52,6 +53,8 @@ export type ChannelCalSerialized = {
   name: string;
   color: string;
   contentChannel: string | null;
+  /** linkedin, instagram, … — drives AI format & tone */
+  contentPlatformPreset: string | null;
   members: CalendarMemberRow[];
   entries: ContentEntryRow[];
 };
@@ -87,15 +90,35 @@ function stripCalMeta(e: EntryWithCal): ContentEntryRow {
   return row;
 }
 
+export type BrandContextProps = {
+  brief: string | null;
+  website: string | null;
+  competitorNotes: string | null;
+};
+
 interface Props {
   slug: string;
   user: TenantTokenPayload;
   companyUsers: UserBrief[];
   initialCalendars: ChannelCalSerialized[];
   aiEnabled?: boolean;
+  initialBrandContext?: BrandContextProps;
 }
 
-export default function ContentStudioView({ slug, user, companyUsers, initialCalendars, aiEnabled = false }: Props) {
+export default function ContentStudioView({
+  slug,
+  user,
+  companyUsers,
+  initialCalendars,
+  aiEnabled = false,
+  initialBrandContext,
+}: Props) {
+  const brandDefaults: BrandContextProps = {
+    brief: null,
+    website: null,
+    competitorNotes: null,
+  };
+  const brandCtx = initialBrandContext ?? brandDefaults;
   const router = useRouter();
   const calendars = initialCalendars;
   const [selectedId, setSelectedId] = useState(() => initialCalendars[0]?.id ?? "");
@@ -110,6 +133,7 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
   const [channelOpen, setChannelOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [channelLabel, setChannelLabel] = useState("");
+  const [channelPlatformPreset, setChannelPlatformPreset] = useState<ContentPlatformPresetId>("linkedin");
   const [channelColor, setChannelColor] = useState("#6366f1");
   const [channelSaving, setChannelSaving] = useState(false);
 
@@ -132,12 +156,27 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
 
   const canCreateChannel = user.isSuperAdmin || user.level <= 1;
   const canManageChannels = canCreateChannel;
+  const canEditBrandContext = user.isSuperAdmin;
   const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
 
   const [generateIdeasOpen, setGenerateIdeasOpen] = useState(false);
   const [generateIdeasStartDate, setGenerateIdeasStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [generateIdeasDays, setGenerateIdeasDays] = useState(14);
   const [generateIdeasSaving, setGenerateIdeasSaving] = useState(false);
+  const [generateIdeasWebsite, setGenerateIdeasWebsite] = useState("");
+  const [generateIdeasCompetitors, setGenerateIdeasCompetitors] = useState("");
+  const [generateIdeasUseOnlyRequest, setGenerateIdeasUseOnlyRequest] = useState(false);
+
+  const [brandBrief, setBrandBrief] = useState(brandCtx.brief ?? "");
+  const [brandWebsite, setBrandWebsite] = useState(brandCtx.website ?? "");
+  const [brandCompetitorNotes, setBrandCompetitorNotes] = useState(brandCtx.competitorNotes ?? "");
+  const [brandSaving, setBrandSaving] = useState(false);
+
+  useEffect(() => {
+    setBrandBrief(brandCtx.brief ?? "");
+    setBrandWebsite(brandCtx.website ?? "");
+    setBrandCompetitorNotes(brandCtx.competitorNotes ?? "");
+  }, [brandCtx.brief, brandCtx.website, brandCtx.competitorNotes]);
 
   const [generateContentSaving, setGenerateContentSaving] = useState(false);
   const selected = calendars.find((c) => c.id === selectedId) ?? calendars[0];
@@ -181,7 +220,8 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
           name: channelName.trim(),
           type: "CHANNEL",
           color: channelColor,
-          contentChannel: channelLabel.trim() || undefined,
+          contentPlatformPreset: channelPlatformPreset,
+          ...(channelPlatformPreset === "custom" ? { contentChannel: channelLabel.trim() } : {}),
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -193,6 +233,7 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
       setChannelOpen(false);
       setChannelName("");
       setChannelLabel("");
+      setChannelPlatformPreset("linkedin");
       setChannelColor("#6366f1");
       refresh();
     } finally {
@@ -334,6 +375,31 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
     refresh();
   }
 
+  async function saveBrandContext() {
+    if (!canEditBrandContext) return;
+    setBrandSaving(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/company`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentBrandBrief: brandBrief.trim() || null,
+          contentBrandWebsite: brandWebsite.trim() || null,
+          contentBrandCompetitorNotes: brandCompetitorNotes.trim() || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof json?.error === "string" ? json.error : "Could not save brand context");
+        return;
+      }
+      toast.success("Brand context saved");
+      router.refresh();
+    } finally {
+      setBrandSaving(false);
+    }
+  }
+
   async function generateIdeasForBoard() {
     if (!selected) return;
     setGenerateIdeasSaving(true);
@@ -345,6 +411,9 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
           startDate: generateIdeasStartDate,
           days: generateIdeasDays,
           replaceExistingIdeas: true,
+          websiteUrl: generateIdeasWebsite.trim() || undefined,
+          competitorUrls: generateIdeasCompetitors.trim() || undefined,
+          useOnlyRequestContext: generateIdeasUseOnlyRequest,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -420,7 +489,12 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
           {canCreateChannel && (
             <button
               type="button"
-              onClick={() => setChannelOpen(true)}
+              onClick={() => {
+                setChannelName("");
+                setChannelLabel("");
+                setChannelPlatformPreset("linkedin");
+                setChannelOpen(true);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -439,7 +513,12 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
           {aiEnabled && selected && (
             <button
               type="button"
-              onClick={() => setGenerateIdeasOpen(true)}
+              onClick={() => {
+                setGenerateIdeasWebsite(brandWebsite);
+                setGenerateIdeasCompetitors(brandCompetitorNotes);
+                setGenerateIdeasUseOnlyRequest(false);
+                setGenerateIdeasOpen(true);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white transition-colors"
               title="Generate one IDEA per day for this channel board"
             >
@@ -450,6 +529,66 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
         </div>
       </div>
 
+      {aiEnabled && (
+        <div className="rounded-2xl border border-surface-700 bg-surface-900/40 p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-surface-200">Brand context for AI</h2>
+              <p className="text-xs text-surface-500 mt-0.5">
+                Describe your institute or business (e.g. NDA coaching, courses offered, city). Add your public website; we fetch page text to ground ideas. Optional: competitor or reference URLs (one per line).
+              </p>
+            </div>
+            {canEditBrandContext && (
+              <button
+                type="button"
+                onClick={() => void saveBrandContext()}
+                disabled={brandSaving}
+                className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold bg-surface-700 hover:bg-surface-600 text-surface-100 border border-surface-600 disabled:opacity-40"
+              >
+                {brandSaving ? "Saving…" : "Save"}
+              </button>
+            )}
+          </div>
+          {!canEditBrandContext && (
+            <p className="text-[11px] text-surface-500">Only a super admin can edit saved brand context. You can still add one-off URLs in Generate ideas.</p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2">
+              <label className="text-xs text-surface-500 block mb-1">Business brief</label>
+              <textarea
+                value={brandBrief}
+                onChange={(e) => setBrandBrief(e.target.value)}
+                disabled={!canEditBrandContext}
+                placeholder="Example: Yashitej Academy — NDA exam coaching, SSB interview prep, Pune. Tone: encouraging, authoritative."
+                rows={3}
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-surface-500 block mb-1">Public website (HTTPS)</label>
+              <input
+                value={brandWebsite}
+                onChange={(e) => setBrandWebsite(e.target.value)}
+                disabled={!canEditBrandContext}
+                placeholder="https://example.com"
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-surface-500 block mb-1">Competitors / references</label>
+              <textarea
+                value={brandCompetitorNotes}
+                onChange={(e) => setBrandCompetitorNotes(e.target.value)}
+                disabled={!canEditBrandContext}
+                placeholder="https://competitor.com/… (one URL per line or free-form notes)"
+                rows={3}
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,220px)_1fr] gap-6">
         <aside className="space-y-3">
           <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Channels</p>
@@ -459,6 +598,9 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
             <ul className="space-y-1">
               {calendars.map((c) => {
                 const on = c.id === selected?.id;
+                const platformTag =
+                  CONTENT_PLATFORM_PRESETS.find((p) => p.id === c.contentPlatformPreset)?.label ??
+                  c.contentChannel;
                 return (
                   <li key={c.id} className="flex items-center gap-2">
                     <button
@@ -474,12 +616,12 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
                         <span className="truncate font-medium">{c.name}</span>
                       </span>
-                      {c.contentChannel && (
+                      {platformTag && (
                         <span className="block text-[11px] text-surface-500 mt-0.5 truncate">
-                          {c.contentChannel} · {c.entries.length} posts
+                          {platformTag} · {c.entries.length} posts
                         </span>
                       )}
-                      {!c.contentChannel && (
+                      {!platformTag && (
                         <span className="block text-[11px] text-surface-500 mt-0.5 truncate">{c.entries.length} posts</span>
                       )}
                       {c.members.length === 0 && (
@@ -670,22 +812,45 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
       {channelOpen && (
         <ModalWrap onClose={() => !channelSaving && setChannelOpen(false)}>
           <h2 className="text-lg font-semibold text-surface-100 mb-1">New channel calendar</h2>
-          <p className="text-xs text-surface-500 mb-4">e.g. LinkedIn, Instagram — one calendar per surface.</p>
+          <p className="text-xs text-surface-500 mb-4">
+            Pick a platform to pre-set post formats, tone, and purpose for AI. One board per surface (e.g. LinkedIn vs Instagram).
+          </p>
           <div className="space-y-3">
-            <label className="block text-xs text-surface-500">Name</label>
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Platform</label>
+              <select
+                value={channelPlatformPreset}
+                onChange={(e) => setChannelPlatformPreset(e.target.value as ContentPlatformPresetId)}
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+              >
+                {CONTENT_PLATFORM_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-surface-500 mt-1.5 leading-snug">
+                {CONTENT_PLATFORM_PRESETS.find((p) => p.id === channelPlatformPreset)?.purpose}
+              </p>
+            </div>
+            <label className="block text-xs text-surface-500">Board name</label>
             <input
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
               className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
-              placeholder="LinkedIn"
+              placeholder="e.g. Q2 LinkedIn — YTA"
             />
-            <label className="block text-xs text-surface-500">Label (optional)</label>
-            <input
-              value={channelLabel}
-              onChange={(e) => setChannelLabel(e.target.value)}
-              className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
-              placeholder="Shown as a tag"
-            />
+            {channelPlatformPreset === "custom" && (
+              <>
+                <label className="block text-xs text-surface-500">Custom channel label</label>
+                <input
+                  value={channelLabel}
+                  onChange={(e) => setChannelLabel(e.target.value)}
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+                  placeholder="e.g. Newsletter, WhatsApp status"
+                />
+              </>
+            )}
             <label className="block text-xs text-surface-500">Color</label>
             <input type="color" value={channelColor} onChange={(e) => setChannelColor(e.target.value)} className="h-10 w-14 rounded-lg border border-surface-700 bg-surface-900" />
             <div className="flex justify-end gap-2 pt-2">
@@ -695,7 +860,11 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
               <button
                 type="button"
                 onClick={() => void createChannel()}
-                disabled={channelSaving || !channelName.trim()}
+                disabled={
+                  channelSaving ||
+                  !channelName.trim() ||
+                  (channelPlatformPreset === "custom" && !channelLabel.trim())
+                }
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary-600 text-white disabled:opacity-40"
               >
                 {channelSaving ? "Saving…" : "Create"}
@@ -814,6 +983,37 @@ export default function ContentStudioView({ slug, user, companyUsers, initialCal
                 />
               </div>
             </div>
+            <div>
+              <label className="text-xs text-surface-500 block mb-1">Website for this run (optional)</label>
+              <input
+                type="url"
+                value={generateIdeasWebsite}
+                onChange={(e) => setGenerateIdeasWebsite(e.target.value)}
+                placeholder="https://… overrides saved website if set"
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-surface-500 block mb-1">Competitor / reference URLs for this run (optional)</label>
+              <textarea
+                value={generateIdeasCompetitors}
+                onChange={(e) => setGenerateIdeasCompetitors(e.target.value)}
+                placeholder="One https URL per line (merged with saved references)"
+                rows={2}
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
+              />
+            </div>
+            <label className="flex items-start gap-2 text-xs text-surface-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={generateIdeasUseOnlyRequest}
+                onChange={(e) => setGenerateIdeasUseOnlyRequest(e.target.checked)}
+                className="mt-0.5 rounded border-surface-600"
+              />
+              <span>
+                Ignore saved brand profile and only use the fields above plus your organization name (useful for one-off campaigns).
+              </span>
+            </label>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"

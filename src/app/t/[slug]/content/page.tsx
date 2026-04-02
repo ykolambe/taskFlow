@@ -28,7 +28,20 @@ export default async function ContentStudioPage({
   const user = await getTenantUserFresh(slug);
   if (!user) redirect(`/t/${slug}/login`);
 
-  const company = await prisma.company.findUnique({ where: { slug } });
+  const company = await prisma.company.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      logoUrl: true,
+      modules: true,
+      isActive: true,
+      contentBrandBrief: true,
+      contentBrandWebsite: true,
+      contentBrandCompetitorNotes: true,
+    },
+  });
   if (!company || !company.isActive) notFound();
 
   const entitled = await isContentStudioEnabledForUser(company.id, user.userId);
@@ -80,6 +93,11 @@ export default async function ContentStudioPage({
         companyUsers={JSON.parse(JSON.stringify(companyUsers))}
         initialCalendars={JSON.parse(JSON.stringify(visibleCalendars))}
         aiEnabled={aiEnabled}
+        initialBrandContext={{
+          brief: company.contentBrandBrief ?? null,
+          website: company.contentBrandWebsite ?? null,
+          competitorNotes: company.contentBrandCompetitorNotes ?? null,
+        }}
       />
     </TenantLayout>
   );

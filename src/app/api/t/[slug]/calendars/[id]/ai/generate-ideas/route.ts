@@ -5,11 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { canEditContentEntry, isContentStudioEnabledForUser } from "@/lib/contentStudio";
 import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { generateGeminiJson } from "@/lib/ai/gemini";
+import {
+  brandHintForFallback,
+  gatherBrandContextForPrompt,
+  type CompanyBrandFields,
+} from "@/lib/contentBrandContext";
+import {
+  formatPlatformPresetForPrompt,
+  getContentPlatformPreset,
+  guessContentTypeFromPreset,
+} from "@/lib/contentPlatformPresets";
 
 const reqSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   days: z.number().int().min(1).max(30),
   replaceExistingIdeas: z.boolean().optional(),
+  /** One-off public site to fetch for this run (overrides saved company website when set). */
+  websiteUrl: z.string().max(2048).optional(),
+  /** Extra competitor / reference URLs (newline- or comma-separated). */
+  competitorUrls: z.string().max(8000).optional(),
+  /** When true, do not use saved brief / saved website / saved competitor notes; still uses org name + request fields. */
+  useOnlyRequestContext: z.boolean().optional(),
 });
 
 type IdeaOutput = {
@@ -60,19 +76,12 @@ function toStoredStartAt(dateOnly: string): Date {
   return new Date(`${dateOnly}T12:00:00`);
 }
 
-function guessContentType(platformLabel: string): string {
-  const l = platformLabel.toLowerCase();
-  if (l.includes("linkedin")) return "TEXT_POST";
-  if (l.includes("instagram")) return "REEL";
-  if (l.includes("facebook")) return "FEED_POST";
-  if (l.includes("x") || l.includes("twitter")) return "THREAD";
-  if (l.includes("youtube")) return "VIDEO_SCRIPT";
-  if (l.includes("tiktok")) return "SHORT_VIDEO";
-  return "TEXT_POST";
-}
-
-function fallbackIdeaNotes(platformLabel: string, date: string): string {
-  const contentType = guessContentType(platformLabel);
+function fallbackIdeaNotes(
+  platformLabel: string,
+  date: string,
+  preset: ReturnType<typeof getContentPlatformPreset>
+): string {
+  const contentType = guessContentTypeFromPreset(preset, platformLabel.toLowerCase());
   const l = platformLabel.trim() ? platformLabel.trim() : "this platform";
   return [
     `Angle: "1 practical takeaway for ${l} on ${date}".`,
@@ -82,13 +91,22 @@ function fallbackIdeaNotes(platformLabel: string, date: string): string {
   ].join("\n- ");
 }
 
-function buildFallbackIdeas(dates: string[], platformLabel: string): IdeaOutput[] {
-  const contentType = guessContentType(platformLabel);
+function buildFallbackIdeas(
+  dates: string[],
+  platformLabel: string,
+  brandHint: string,
+  preset: ReturnType<typeof getContentPlatformPreset>
+): IdeaOutput[] {
+  const contentType = guessContentTypeFromPreset(preset, platformLabel.toLowerCase());
+  const org = brandHint.trim() || platformLabel || "your organization";
   return dates.map((date) => ({
     date,
-    title: `${platformLabel || "Platform"}: post idea for ${date}`,
+    title: `${platformLabel || "Platform"}: ${org} — post idea for ${date}`,
     contentType,
-    ideaNotes: fallbackIdeaNotes(platformLabel, date),
+    ideaNotes: [
+      `Audience / brand: ${org}.`,
+      fallbackIdeaNotes(platformLabel, date, preset),
+    ].join("\n- "),
   }));
 }
 
@@ -111,12 +129,13 @@ export async function POST(
   const parsedReq = reqSchema.safeParse(bodyRaw);
   if (!parsedReq.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { startDate, days, replaceExistingIdeas } = parsedReq.data;
+  const { startDate, days, replaceExistingIdeas, websiteUrl, competitorUrls, useOnlyRequestContext } =
+    parsedReq.data;
   const replace = replaceExistingIdeas ?? true;
 
   const cal = await prisma.calendarCollection.findFirst({
     where: { id, companyId: user.companyId, isArchived: false, type: "CHANNEL" },
-    select: { id: true, name: true, contentChannel: true },
+    select: { id: true, name: true, contentChannel: true, contentPlatformPreset: true },
   });
   if (!cal) return NextResponse.json({ error: "Channel calendar not found" }, { status: 404 });
 
@@ -145,19 +164,81 @@ export async function POST(
     });
   }
 
-  const platformLabel = cal.contentChannel?.trim() ? cal.contentChannel.trim() : cal.name;
+  const preset = getContentPlatformPreset(cal.contentPlatformPreset);
+  const platformLabel = cal.contentChannel?.trim() ? cal.contentChannel.trim() : preset?.label ?? cal.name;
+
+  const companyRow = await prisma.company.findUnique({
+    where: { id: user.companyId },
+    select: {
+      name: true,
+      domain: true,
+      contentBrandBrief: true,
+      contentBrandWebsite: true,
+      contentBrandCompetitorNotes: true,
+    },
+  });
+  const companyBase: CompanyBrandFields = {
+    name: companyRow?.name ?? "",
+    domain: companyRow?.domain ?? null,
+    contentBrandBrief: companyRow?.contentBrandBrief ?? null,
+    contentBrandWebsite: companyRow?.contentBrandWebsite ?? null,
+    contentBrandCompetitorNotes: companyRow?.contentBrandCompetitorNotes ?? null,
+  };
+
+  const companyForGather: CompanyBrandFields = useOnlyRequestContext
+    ? {
+        ...companyBase,
+        contentBrandBrief: null,
+        contentBrandWebsite: null,
+        contentBrandCompetitorNotes: null,
+      }
+    : companyBase;
+
+  const recentSnippets = await prisma.calendarEntry.findMany({
+    where: {
+      companyId: user.companyId,
+      kind: "CONTENT",
+      contentStatus: { in: ["PUBLISHED", "READY_TO_PUBLISH", "APPROVED"] },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 12,
+    select: { title: true, notes: true },
+  });
+  const recentContentSnippets = recentSnippets.map((e) => {
+    const n = (e.notes ?? "").replace(/^@contentType:.*$/m, "").trim().slice(0, 220);
+    return `${e.title}${n ? ` — ${n}` : ""}`;
+  });
+
+  const { contextText, sources } = await gatherBrandContextForPrompt({
+    company: companyForGather,
+    websiteUrlOverride: websiteUrl?.trim() || null,
+    competitorUrlsOverride: competitorUrls?.trim() || null,
+    recentContentSnippets,
+  });
 
   const prompt = [
     "You generate social media content ideas for a specific platform/channel.",
     "Return strict JSON only (no markdown, no prose).",
     "",
+    "Use the BUSINESS CONTEXT below to tailor every idea: speak to the real audience, services, and tone of this organization.",
+    "Do not produce generic marketing filler; reference concrete themes from the context when possible (courses, outcomes, exams, location, differentiators).",
+    "If context is thin, still stay specific to the organization name and platform.",
+    "",
     `Platform label: ${platformLabel}`,
     `Board calendar name: ${cal.name}`,
     "",
+    "PLATFORM STYLE (follow these formats, tone, and posting purpose):",
+    formatPlatformPresetForPrompt(preset, platformLabel),
+    "",
+    "BUSINESS CONTEXT (may include fetched website text and tenant notes):",
+    contextText || "(No extra context provided — use organization name and platform only.)",
+    "",
+    `Context sources used: ${sources.join(", ") || "tenant:name only"}`,
+    "",
     "Create exactly one idea per date. Each idea must include:",
     "- date (YYYY-MM-DD, must match requested dates)",
-    "- title (short, descriptive)",
-    "- contentType (the format/type for that platform, e.g. LinkedIn: TEXT_POST|CAROUSEL|ARTICLE|POLL, Instagram: REEL|CAROUSEL|STORY|FEED_POST, etc.)",
+    "- title (short, descriptive; should reflect this business, not generic social media advice)",
+    "- contentType (must match this platform preset: prefer one of the typical formats listed above; use UPPER_SNAKE_CASE)",
     "- ideaNotes (2-6 bullet points worth of guidance: angle, key message, suggested structure, CTA, hashtags suggestions if appropriate)",
     "",
     "Requested dates JSON:",
@@ -175,7 +256,9 @@ export async function POST(
     });
   } catch {
     source = "fallback";
-    result = { ideas: buildFallbackIdeas(dates, platformLabel) };
+    result = {
+      ideas: buildFallbackIdeas(dates, platformLabel, brandHintForFallback(companyForGather), preset),
+    };
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -225,6 +308,11 @@ export async function POST(
     return rows.length;
   });
 
-  return NextResponse.json({ success: true, createdCount: created, source });
+  return NextResponse.json({
+    success: true,
+    createdCount: created,
+    source,
+    contextSources: sources,
+  });
 }
 

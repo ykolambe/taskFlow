@@ -5,10 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { canEditContentEntry, isContentStudioEnabledForUser } from "@/lib/contentStudio";
 import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { generateGeminiJson } from "@/lib/ai/gemini";
+import {
+  brandHintForFallback,
+  gatherBrandContextForPrompt,
+  type CompanyBrandFields,
+} from "@/lib/contentBrandContext";
+import { formatPlatformPresetForPrompt, getContentPlatformPreset } from "@/lib/contentPlatformPresets";
 
 const reqSchema = z.object({
-  // Reserved for future customization.
-  // Keeping it empty means we can still validate the body.
+  websiteUrl: z.string().max(2048).optional(),
+  competitorUrls: z.string().max(8000).optional(),
+  useOnlyRequestContext: z.boolean().optional(),
 });
 
 const contentResponseSchema = {
@@ -38,8 +45,9 @@ function buildFallbackDraft(params: {
   contentType: string;
   ideaTitle: string;
   ideaText: string;
+  brandHint?: string;
 }): { title: string; notes: string; url?: string } {
-  const { platformLabel, contentType, ideaTitle, ideaText } = params;
+  const { platformLabel, contentType, ideaTitle, ideaText, brandHint } = params;
   const safeIdea = ideaText || ideaTitle;
   const draftPrefix = "Draft: ";
   const draftTitle = ideaTitle.startsWith(draftPrefix) ? ideaTitle : `${draftPrefix}${ideaTitle}`;
@@ -48,6 +56,7 @@ function buildFallbackDraft(params: {
     notes: [
       `@contentType: ${contentType}`,
       "",
+      ...(brandHint ? [`Brand / audience: ${brandHint}`, ""] : []),
       safeIdea,
       "",
       "Suggested draft structure:",
@@ -76,10 +85,10 @@ export async function POST(
     return NextResponse.json({ error: "AI is not enabled for your account." }, { status: 403 });
   }
 
-  // Validate request body (even though it's currently empty)
   const bodyRaw = await req.json().catch(() => ({}));
   const parsed = reqSchema.safeParse(bodyRaw);
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const { websiteUrl, competitorUrls, useOnlyRequestContext } = parsed.data;
 
   const entry = await prisma.calendarEntry.findFirst({
     where: {
@@ -109,20 +118,80 @@ export async function POST(
 
   const cal = await prisma.calendarCollection.findFirst({
     where: { id: calendarId, companyId: user.companyId, isArchived: false, type: "CHANNEL" },
-    select: { id: true, name: true, contentChannel: true },
+    select: { id: true, name: true, contentChannel: true, contentPlatformPreset: true },
   });
   if (!cal) return NextResponse.json({ error: "Channel calendar not found" }, { status: 404 });
 
   const canEdit = await canEditContentEntry(cal.id, user.companyId, user.userId, user.isSuperAdmin);
   if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const preset = getContentPlatformPreset(cal.contentPlatformPreset);
   const contentType = extractContentType(entry.notes) ?? "TEXT_POST";
   const ideaText = extractIdeaText(entry.notes);
-  const platformLabel = cal.contentChannel?.trim() ? cal.contentChannel.trim() : cal.name;
+  const platformLabel = cal.contentChannel?.trim() ? cal.contentChannel.trim() : preset?.label ?? cal.name;
+
+  const companyRow = await prisma.company.findUnique({
+    where: { id: user.companyId },
+    select: {
+      name: true,
+      domain: true,
+      contentBrandBrief: true,
+      contentBrandWebsite: true,
+      contentBrandCompetitorNotes: true,
+    },
+  });
+  const companyBase: CompanyBrandFields = {
+    name: companyRow?.name ?? "",
+    domain: companyRow?.domain ?? null,
+    contentBrandBrief: companyRow?.contentBrandBrief ?? null,
+    contentBrandWebsite: companyRow?.contentBrandWebsite ?? null,
+    contentBrandCompetitorNotes: companyRow?.contentBrandCompetitorNotes ?? null,
+  };
+  const companyForGather: CompanyBrandFields = useOnlyRequestContext
+    ? {
+        ...companyBase,
+        contentBrandBrief: null,
+        contentBrandWebsite: null,
+        contentBrandCompetitorNotes: null,
+      }
+    : companyBase;
+
+  const recentSnippets = await prisma.calendarEntry.findMany({
+    where: {
+      companyId: user.companyId,
+      kind: "CONTENT",
+      contentStatus: { in: ["PUBLISHED", "READY_TO_PUBLISH", "APPROVED"] },
+      id: { not: entry.id },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 8,
+    select: { title: true, notes: true },
+  });
+  const recentContentSnippets = recentSnippets.map((e) => {
+    const n = (e.notes ?? "").replace(/^@contentType:.*$/m, "").trim().slice(0, 220);
+    return `${e.title}${n ? ` — ${n}` : ""}`;
+  });
+
+  const { contextText, sources } = await gatherBrandContextForPrompt({
+    company: companyForGather,
+    websiteUrlOverride: websiteUrl?.trim() || null,
+    competitorUrlsOverride: competitorUrls?.trim() || null,
+    recentContentSnippets,
+  });
 
   const prompt = [
     "You transform a social content idea into a ready-to-review draft for the same platform.",
     "Return strict JSON only (no markdown, no prose outside JSON).",
+    "",
+    "Use the BUSINESS CONTEXT below for tone, audience, and specifics. Avoid generic filler; align with this organization.",
+    "",
+    "BUSINESS CONTEXT:",
+    contextText || "(No extra context — use organization name from idea only.)",
+    "",
+    `Context sources: ${sources.join(", ") || "tenant:name only"}`,
+    "",
+    "PLATFORM STYLE (match format, tone, and purpose):",
+    formatPlatformPresetForPrompt(preset, platformLabel),
     "",
     `Platform label: ${platformLabel}`,
     `Content type: ${contentType}`,
@@ -155,6 +224,7 @@ export async function POST(
       contentType,
       ideaTitle: entry.title,
       ideaText: ideaText,
+      brandHint: brandHintForFallback(companyForGather),
     });
   }
 
@@ -170,6 +240,6 @@ export async function POST(
     },
   });
 
-  return NextResponse.json({ success: true, data: updated, source });
+  return NextResponse.json({ success: true, data: updated, source, contextSources: sources });
 }
 
