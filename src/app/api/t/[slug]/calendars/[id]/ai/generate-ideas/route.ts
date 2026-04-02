@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { format } from "date-fns";
 import { z } from "zod";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +14,7 @@ import {
 import {
   formatPlatformPresetForPrompt,
   getContentPlatformPreset,
-  guessContentTypeFromPreset,
+  pickContentTypeForDayIndex,
 } from "@/lib/contentPlatformPresets";
 
 const reqSchema = z.object({
@@ -79,16 +80,37 @@ function toStoredStartAt(dateOnly: string): Date {
 function fallbackIdeaNotes(
   platformLabel: string,
   date: string,
+  contentType: string,
   preset: ReturnType<typeof getContentPlatformPreset>
 ): string {
-  const contentType = guessContentTypeFromPreset(preset, platformLabel.toLowerCase());
   const l = platformLabel.trim() ? platformLabel.trim() : "this platform";
   return [
-    `Angle: "1 practical takeaway for ${l} on ${date}".`,
+    `Format: ${contentType} — angle: one practical takeaway for ${l} on ${date}.`,
     `Structure: Hook -> 3 quick points -> mini-example -> takeaway summary.`,
     `CTA: Ask a question that invites comments (keep it under 140 chars).`,
     `Hashtags: suggest 3-7 relevant tags for ${contentType} audiences.`,
   ].join("\n- ");
+}
+
+function singleFallbackIdea(
+  date: string,
+  platformLabel: string,
+  brandHint: string,
+  preset: ReturnType<typeof getContentPlatformPreset>,
+  dayIndex: number
+): IdeaOutput {
+  const contentType = pickContentTypeForDayIndex(preset, platformLabel.toLowerCase(), dayIndex);
+  const org = brandHint.trim() || platformLabel || "your organization";
+  const dayTag = format(parseDateOnly(date), "EEE MMM d");
+  return {
+    date,
+    title: `${platformLabel || "Platform"}: ${org} — ${contentType.replace(/_/g, " ")} (${dayTag})`,
+    contentType,
+    ideaNotes: [
+      `Audience / brand: ${org}.`,
+      fallbackIdeaNotes(platformLabel, date, contentType, preset),
+    ].join("\n- "),
+  };
 }
 
 function buildFallbackIdeas(
@@ -97,17 +119,52 @@ function buildFallbackIdeas(
   brandHint: string,
   preset: ReturnType<typeof getContentPlatformPreset>
 ): IdeaOutput[] {
-  const contentType = guessContentTypeFromPreset(preset, platformLabel.toLowerCase());
-  const org = brandHint.trim() || platformLabel || "your organization";
-  return dates.map((date) => ({
-    date,
-    title: `${platformLabel || "Platform"}: ${org} — post idea for ${date}`,
-    contentType,
-    ideaNotes: [
-      `Audience / brand: ${org}.`,
-      fallbackIdeaNotes(platformLabel, date, preset),
-    ].join("\n- "),
-  }));
+  return dates.map((date, i) => singleFallbackIdea(date, platformLabel, brandHint, preset, i));
+}
+
+/**
+ * One idea per requested date; fill gaps from template. Models often repeat titles — fix below.
+ */
+function alignIdeasToDates(
+  dates: string[],
+  raw: IdeaOutput[],
+  platformLabel: string,
+  brandHint: string,
+  preset: ReturnType<typeof getContentPlatformPreset>
+): IdeaOutput[] {
+  const byDate = new Map<string, IdeaOutput>();
+  for (const it of raw) {
+    if (!it?.date || !dates.includes(it.date)) continue;
+    if (!byDate.has(it.date)) byDate.set(it.date, it);
+  }
+  return dates.map((date, i) =>
+    byDate.has(date) ? byDate.get(date)! : singleFallbackIdea(date, platformLabel, brandHint, preset, i)
+  );
+}
+
+/** If the model returns the same title for multiple days, make titles unique (readable). */
+function dedupeTitlesAcrossDays(ideas: IdeaOutput[]): IdeaOutput[] {
+  const used = new Set<string>();
+  return ideas.map((idea) => {
+    let title = idea.title.trim();
+    let key = title.toLowerCase();
+    if (!used.has(key)) {
+      used.add(key);
+      return { ...idea, title };
+    }
+    const d = parseDateOnly(idea.date);
+    const suffix = format(d, "EEE MMM d");
+    title = `${idea.title.trim()} · ${suffix}`;
+    key = title.toLowerCase();
+    let n = 2;
+    while (used.has(key)) {
+      title = `${idea.title.trim()} · ${suffix} (${n})`;
+      key = title.toLowerCase();
+      n += 1;
+    }
+    used.add(key);
+    return { ...idea, title };
+  });
 }
 
 export async function POST(
@@ -216,6 +273,11 @@ export async function POST(
     recentContentSnippets,
   });
 
+  const allowedContentTypes =
+    preset?.defaultContentTypes?.length
+      ? preset.defaultContentTypes.join(", ")
+      : "TEXT_POST, CAROUSEL, SHORT_VIDEO, REEL, FEED_POST";
+
   const prompt = [
     "You generate social media content ideas for a specific platform/channel.",
     "Return strict JSON only (no markdown, no prose).",
@@ -238,8 +300,17 @@ export async function POST(
     "Create exactly one idea per date. Each idea must include:",
     "- date (YYYY-MM-DD, must match requested dates)",
     "- title (short, descriptive; should reflect this business, not generic social media advice)",
-    "- contentType (must match this platform preset: prefer one of the typical formats listed above; use UPPER_SNAKE_CASE)",
+    `- contentType — MUST be one of these for this channel: ${allowedContentTypes}. Use UPPER_SNAKE_CASE. Do not use a vague label like POST or GENERIC unless the platform list literally includes it.`,
     "- ideaNotes (2-6 bullet points worth of guidance: angle, key message, suggested structure, CTA, hashtags suggestions if appropriate)",
+    "",
+    "CRITICAL — format variety (not just “a post”):",
+    "- Each idea must match its contentType. Describe that format in the notes: e.g. for REEL/SHORT_VIDEO — hook, shots/beats, on-screen text; for CAROUSEL — slide themes and order; for STORY — sequence of frames/polls/stickers; for FEED_POST — caption structure; for EVENT — date/time/location CTA.",
+    `- Across the date range, rotate through several different contentTypes from the list above (e.g. Instagram: REEL, CAROUSEL, STORY, FEED_POST; Facebook: FEED_POST, EVENT, SHORT_VIDEO; TikTok: SHORT_VIDEO, TUTORIAL_HOOK, TREND_STITCH, SERIES_PART; LinkedIn: TEXT_POST, CAROUSEL, POLL; YouTube: VIDEO_SCRIPT, SHORT, COMMUNITY_POST). Do not output the same contentType for every day when the list has more than one option.`,
+    "",
+    "CRITICAL — variety across days:",
+    "- Each date MUST get a different theme/angle than the other dates (e.g. tip Monday, student win Tuesday, myth-vs-fact Wednesday, event/reminder Thursday, FAQ Friday).",
+    "- Do NOT copy-paste the same title or the same ideaNotes for multiple dates. Titles must be unique across the list.",
+    "- Tie each idea to that specific day in the title or notes (e.g. mention the day of week or a reason this fits that date).",
     "",
     "Requested dates JSON:",
     JSON.stringify({ dates }),
@@ -261,11 +332,13 @@ export async function POST(
     };
   }
 
+  const brandHint = brandHintForFallback(companyForGather);
+  const normalizedIdeas = dedupeTitlesAcrossDays(
+    alignIdeasToDates(dates, result.ideas, platformLabel, brandHint, preset)
+  );
+
   const created = await prisma.$transaction(async (tx) => {
-    const rows = result.ideas
-      .filter((it) => dates.includes(it.date))
-      .slice(0, days)
-      .map((it) => ({
+    const rows = normalizedIdeas.map((it) => ({
         companyId: user.companyId,
         calendarId: cal.id,
         creatorId: user.userId,

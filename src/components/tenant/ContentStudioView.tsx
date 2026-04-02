@@ -474,12 +474,12 @@ export default function ContentStudioView({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between min-w-0">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary-400 shrink-0" />
+            <FileText className="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0" />
             Content Studio
           </h1>
           <p className="text-surface-400 text-sm mt-0.5">
             Channel calendars, editorial status, assignees, and approvals.{" "}
-            <Link href={`/t/${slug}/calendar`} className="text-primary-400 hover:text-primary-300">
+            <Link href={`/t/${slug}/calendar`} className="link-on-surface">
               Calendar
             </Link>{" "}
             shows scheduled dates alongside other work. Boards are channel calendars; archiving one removes it from Calendar.
@@ -708,7 +708,7 @@ export default function ContentStudioView({
                       <button
                         type="button"
                         onClick={() => setEditingEntry(stripCalMeta(e))}
-                        className="text-xs text-primary-400 hover:text-primary-300 shrink-0"
+                        className="text-xs link-on-surface shrink-0"
                       >
                         Open
                       </button>
@@ -758,7 +758,7 @@ export default function ContentStudioView({
                               href={e.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-primary-400 hover:text-primary-300 text-xs"
+                              className="inline-flex items-center gap-1 link-on-surface text-xs"
                             >
                               Open <ExternalLink className="w-3 h-3" />
                             </a>
@@ -770,7 +770,7 @@ export default function ContentStudioView({
                           <button
                             type="button"
                             onClick={() => setEditingEntry(stripCalMeta(e))}
-                            className="text-xs text-primary-400 hover:text-primary-300"
+                            className="text-xs link-on-surface"
                           >
                             Edit
                           </button>

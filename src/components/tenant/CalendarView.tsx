@@ -363,12 +363,12 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       <div className="flex flex-col gap-3 min-[480px]:flex-row min-[480px]:items-start min-[480px]:justify-between min-w-0">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary-400 flex-shrink-0" />
+            <Calendar className="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
             Calendar
           </h1>
-          <p className="text-surface-400 text-sm mt-0.5">
-            <span className="text-surface-300">Workspace</span> shows team tasks, recurring work, and shared goals.{" "}
-            <span className="text-surface-300">Personal</span> shows only your tasks and that calendar&apos;s goals.
+          <p className="text-ui-muted text-sm mt-0.5">
+            <span className="text-slate-800 dark:text-surface-300 font-medium">Workspace</span> shows team tasks, recurring work, and shared goals.{" "}
+            <span className="text-slate-800 dark:text-surface-300 font-medium">Personal</span> shows only your tasks and that calendar&apos;s goals.
           </p>
         </div>
 
@@ -392,7 +392,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                 onClick={() => setView(v)}
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
-                  view === v ? "bg-primary-500 text-white" : "text-surface-400 hover:text-surface-200"
+                  view === v ? "bg-primary-500 text-white" : "text-slate-600 hover:text-slate-900 dark:text-surface-400 dark:hover:text-surface-200"
                 )}
               >
                 {v}
@@ -404,7 +404,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
 
       {/* Single-select calendar focus — color matches goals below */}
       <div className="bg-surface-800 border border-surface-700 rounded-2xl p-3 sm:p-4">
-        <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider mb-2">Focus calendar</p>
+        <p className="text-[11px] font-semibold text-ui-subtle uppercase tracking-wider mb-2">Focus calendar</p>
         <div className="flex flex-wrap items-center gap-2">
           {calendars.map((c) => {
             const selected = c.id === selectedCalendarId;
@@ -414,14 +414,15 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                 key={c.id}
                 className={cn(
                   "inline-flex items-center rounded-full text-xs border-2 transition-all",
-                  selected ? "shadow-md" : "border-surface-600 text-surface-400 hover:border-surface-500"
+                  selected
+                    ? "shadow-md text-slate-900 dark:text-surface-50"
+                    : "border-surface-600 text-slate-700 hover:text-slate-900 dark:text-surface-400 dark:hover:text-surface-200 hover:border-surface-500"
                 )}
                 style={
                   selected
                     ? {
-                        backgroundColor: `${c.color}28`,
+                        backgroundColor: `${c.color}35`,
                         borderColor: c.color,
-                        color: "var(--tw-prose-invert, #f8fafc)",
                       }
                     : undefined
                 }
@@ -437,7 +438,9 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                   <span
                     className={cn(
                       "text-[10px] px-1.5 py-0.5 rounded-md font-semibold",
-                      selected ? "bg-black/25 text-surface-100" : "bg-surface-700 text-surface-400"
+                      selected
+                        ? "bg-black/15 text-slate-900 dark:bg-black/25 dark:text-surface-100"
+                        : "bg-slate-200/90 text-slate-700 dark:bg-surface-700 dark:text-surface-300"
                     )}
                   >
                     {calendarTypeLabel(c.type)}
@@ -448,7 +451,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                     type="button"
                     onClick={() => void deleteCalendar(c)}
                     disabled={deletingCalendarId === c.id}
-                    className="pr-2 py-1.5 text-surface-500 hover:text-red-400 disabled:opacity-40"
+                    className="pr-2 py-1.5 text-slate-500 hover:text-red-600 dark:text-surface-500 dark:hover:text-red-400 disabled:opacity-40"
                     title="Delete personal calendar"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -459,17 +462,17 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
           })}
         </div>
         {selectedCalendar && (
-          <p className="text-xs text-surface-500 mt-3">
+          <p className="text-xs text-ui-muted mt-3">
             Goals use this calendar&apos;s color (
             <span className="inline-flex items-center gap-1 align-middle">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedCalendar.color }} />
-              <span className="font-mono text-[11px]">{selectedCalendar.color}</span>
+              <span className="font-mono text-[11px] text-slate-800 dark:text-surface-200">{selectedCalendar.color}</span>
             </span>
             ).{" "}
             {channelCalendar ? (
               <>
                 Channel calendars show content and your own tasks. Manage posts in{" "}
-                <Link href={`/t/${slug}/content`} className="text-primary-400 hover:text-primary-300">
+                <Link href={`/t/${slug}/content`} className="link-on-surface">
                   Content Studio
                 </Link>
                 .
@@ -488,7 +491,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         <button
           type="button"
           onClick={() => setCurrentDate((d) => subMonths(d, 1))}
-          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-surface-750 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800 rounded-xl transition-all"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -496,7 +499,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         <button
           type="button"
           onClick={() => setCurrentDate((d) => addMonths(d, 1))}
-          className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-xl transition-all"
+          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-surface-750 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800 rounded-xl transition-all"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
@@ -572,7 +575,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name) => (
                 <div
                   key={name}
-                  className="py-2.5 text-center text-[11px] font-semibold text-surface-500 uppercase tracking-wider"
+                  className="py-2.5 text-center text-[11px] font-semibold text-slate-600 dark:text-surface-500 uppercase tracking-wider"
                 >
                   {name}
                 </div>
@@ -613,8 +616,8 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                       todayFlag
                         ? "bg-primary-500 text-white"
                         : isSelected
-                        ? "bg-primary-500/30 text-primary-300"
-                        : "text-surface-300"
+                        ? "bg-primary-500/30 text-primary-800 dark:text-primary-300"
+                        : "text-slate-800 dark:text-surface-300"
                     )}>
                       {format(day, "d")}
                     </div>
@@ -627,10 +630,10 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                           className={cn(
                             "text-[9px] font-medium px-1 py-0.5 rounded truncate leading-tight",
                             ev.isOverdue
-                              ? "bg-red-500/20 text-red-400"
+                              ? "bg-red-500/20 text-red-700 dark:text-red-400"
                               : ev.isMyTask
-                              ? "bg-primary-500/20 text-primary-400"
-                              : "bg-surface-600 text-surface-300"
+                              ? "bg-primary-500/20 text-primary-900 dark:text-primary-400"
+                              : "bg-slate-200/90 text-slate-800 dark:bg-surface-600 dark:text-surface-300"
                           )}
                         >
                           {ev.title}
@@ -653,13 +656,13 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                       {contentEvents.slice(0, 1).map((ev) => (
                         <div
                           key={ev.id}
-                          className="text-[9px] font-medium px-1 py-0.5 rounded truncate leading-tight border border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
+                          className="text-[9px] font-medium px-1 py-0.5 rounded truncate leading-tight border border-cyan-600/35 bg-cyan-500/15 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-200"
                         >
                           ▪ {ev.title}
                         </div>
                       ))}
                       {events.length > 3 && (
-                        <p className="text-[9px] text-surface-500 px-1">
+                        <p className="text-[9px] text-slate-600 dark:text-surface-500 px-1">
                           +{events.length - 3} more
                         </p>
                       )}
@@ -683,7 +686,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-5 py-4 border-b border-surface-700 min-w-0">
                 <h3 className="font-semibold text-surface-100 text-sm min-w-0">
                   {isToday(selectedDate) ? "Today" : format(selectedDate, "EEEE, MMMM d")}
-                  <span className="ml-2 text-surface-500 font-normal text-xs">
+                  <span className="ml-2 text-ui-muted font-normal text-xs">
                     {selectedEvents.length} event{selectedEvents.length !== 1 ? "s" : ""}
                   </span>
                 </h3>
@@ -698,7 +701,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                   <button
                     type="button"
                     onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()); }}
-                    className="text-xs text-primary-400 hover:text-primary-300 transition-colors px-2 py-1.5"
+                    className="text-xs link-on-surface transition-colors px-2 py-1.5"
                   >
                     Today
                   </button>
@@ -706,7 +709,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
               </div>
 
               {selectedEvents.length === 0 ? (
-                <div className="py-10 text-center text-surface-500 text-sm">
+                <div className="py-10 text-center text-ui-muted text-sm">
                   No events on this day
                 </div>
               ) : (
@@ -729,7 +732,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={cn(
                               "text-[10px]",
-                              ev.isMyTask ? "text-primary-400" : "text-surface-500"
+                              ev.isMyTask ? "text-primary-800 dark:text-primary-400" : "text-ui-muted"
                             )}>
                               {ev.isMyTask ? "Assigned to me" : "Team task"}
                             </span>
@@ -740,7 +743,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                             )}
                           </div>
                         </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-surface-600 group-hover:text-surface-400 transition-colors" />
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:text-surface-600 dark:group-hover:text-surface-400 transition-colors" />
                       </div>
                     </Link>
                   ))}
@@ -764,7 +767,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                             Recurring task
                           </span>
                         </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-surface-600 group-hover:text-surface-400 transition-colors" />
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:text-surface-600 dark:group-hover:text-surface-400 transition-colors" />
                       </div>
                     </Link>
                   ))}
@@ -801,19 +804,19 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                   {/* Content (channel) */}
                   {selectedContent.map((ev) => (
                     <div key={ev.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
-                      <FileText className="w-3.5 h-3.5 flex-shrink-0 text-cyan-400" />
+                      <FileText className="w-3.5 h-3.5 flex-shrink-0 text-cyan-700 dark:text-cyan-400" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-surface-200 group-hover:text-surface-100 truncate">
                           {ev.title}
                         </p>
-                        <span className="text-[10px] font-semibold text-cyan-400/90">
+                        <span className="text-[10px] font-semibold text-cyan-800 dark:text-cyan-400/90">
                           Content{ev.contentStatus ? ` · ${ev.contentStatus.replace(/_/g, " ")}` : ""}
                         </span>
-                        {ev.notes && <p className="text-[10px] text-surface-500 mt-0.5 truncate">{ev.notes}</p>}
+                        {ev.notes && <p className="text-[10px] text-ui-muted mt-0.5 truncate">{ev.notes}</p>}
                       </div>
                       <Link
                         href={`/t/${slug}/content`}
-                        className="text-[11px] text-primary-400 hover:text-primary-300 shrink-0"
+                        className="text-[11px] link-on-surface shrink-0"
                       >
                         Studio
                       </Link>
@@ -944,7 +947,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-4 flex-wrap text-[11px] text-surface-500">
+      <div className="flex items-center gap-4 flex-wrap text-[11px] text-ui-muted">
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded bg-primary-500/30" />
           My tasks
@@ -1011,12 +1014,12 @@ function WeekView({
                 isSelected && "bg-primary-500/10"
               )}
             >
-              <p className="text-[10px] text-surface-500 uppercase tracking-wider">
+              <p className="text-[10px] text-slate-600 dark:text-surface-500 uppercase tracking-wider">
                 {DAY_NAMES[day.getDay()]}
               </p>
               <div className={cn(
                 "w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold mx-auto mt-1",
-                todayFlag ? "bg-primary-500 text-white" : isSelected ? "bg-primary-500/30 text-primary-300" : "text-surface-300"
+                todayFlag ? "bg-primary-500 text-white" : isSelected ? "bg-primary-500/30 text-primary-900 dark:text-primary-300" : "text-slate-800 dark:text-surface-300"
               )}>
                 {format(day, "d")}
               </div>
@@ -1059,7 +1062,7 @@ function WeekView({
             </Link>
           </div>
           {(eventMap[dateKey(selectedDate)] ?? []).length === 0 ? (
-            <div className="py-12 text-center text-surface-500 text-sm">
+            <div className="py-12 text-center text-ui-muted text-sm">
               Nothing scheduled for {format(selectedDate, "EEEE, MMMM d")}
             </div>
           ) : (
@@ -1086,14 +1089,14 @@ function WeekView({
                 </div>
               ) : ev.type === "content" ? (
                 <div key={ev.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
-                  <FileText className="w-4 h-4 flex-shrink-0 text-cyan-400" />
+                  <FileText className="w-4 h-4 flex-shrink-0 text-cyan-700 dark:text-cyan-400" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate text-surface-200 group-hover:text-surface-100">{ev.title}</p>
-                    <p className="text-[10px] text-cyan-400/80 mt-0.5">
+                    <p className="text-[10px] text-cyan-800 dark:text-cyan-400/80 mt-0.5">
                       Content{ev.contentStatus ? ` · ${ev.contentStatus.replace(/_/g, " ")}` : ""}
                     </p>
                   </div>
-                  <Link href={`/t/${slug}/content`} className="text-[11px] text-primary-400 shrink-0">
+                  <Link href={`/t/${slug}/content`} className="text-[11px] link-on-surface shrink-0">
                     Studio
                   </Link>
                   <button
@@ -1139,7 +1142,7 @@ function WeekView({
                       </p>
                     </div>
                     {ev.isOverdue && <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
-                    <ChevronRight className="w-3.5 h-3.5 text-surface-600 group-hover:text-surface-400 transition-colors" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:text-surface-600 dark:group-hover:text-surface-400 transition-colors" />
                   </div>
                 </Link>
               )

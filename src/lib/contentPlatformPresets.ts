@@ -88,10 +88,10 @@ export const CONTENT_PLATFORM_PRESETS: ContentPlatformPreset[] = [
     label: "TikTok",
     purpose: "Short video trends, entertainment, rapid hooks, discovery.",
     tone: "Fast, casual, trend-aware; pattern interrupt in first 1-2 seconds verbally.",
-    suggestedFormats: ["SHORT_VIDEO", "SERIES"],
+    suggestedFormats: ["SHORT_VIDEO", "TUTORIAL / how-to", "TREND / stitch or duet angle", "SERIES / part-based"],
     aiGuidance:
-      "Optimize for TikTok: hook + beat sheet, on-screen text suggestions, sound/trend placeholders only if brand-appropriate. Keep ideas short and visual.",
-    defaultContentTypes: ["SHORT_VIDEO"],
+      "Optimize for TikTok: hook + beat sheet, on-screen text suggestions, sound/trend placeholders only if brand-appropriate. Keep ideas short and visual. Vary idea types: not every day should be a generic post — mix tutorials, trends, BTS, and series parts.",
+    defaultContentTypes: ["SHORT_VIDEO", "TUTORIAL_HOOK", "TREND_STITCH", "SERIES_PART", "BEHIND_THE_SCENES"],
   },
   {
     id: "threads",
@@ -110,8 +110,8 @@ export const CONTENT_PLATFORM_PRESETS: ContentPlatformPreset[] = [
     tone: "Match the brand brief and any custom channel label you provide.",
     suggestedFormats: ["TEXT_POST", "VIDEO", "CAROUSEL"],
     aiGuidance:
-      "Use the organization brand context and the custom channel label; pick formats that fit that label.",
-    defaultContentTypes: ["TEXT_POST"],
+      "Use the organization brand context and the custom channel label; pick formats that fit that label. Rotate formats across days (e.g. short video vs carousel vs text) when the label implies a visual or multi-format channel.",
+    defaultContentTypes: ["TEXT_POST", "SHORT_VIDEO", "CAROUSEL"],
   },
 ];
 
@@ -155,6 +155,18 @@ export function guessContentTypeFromPreset(preset: ContentPlatformPreset | null,
   if (l.includes("youtube")) return "VIDEO_SCRIPT";
   if (l.includes("tiktok")) return "SHORT_VIDEO";
   return "TEXT_POST";
+}
+
+/** Rotates through the preset’s formats so multi-day fallbacks are not all the same type. */
+export function pickContentTypeForDayIndex(
+  preset: ContentPlatformPreset | null,
+  platformLabelLower: string,
+  dayIndex: number
+): string {
+  const types = preset?.defaultContentTypes?.length
+    ? preset.defaultContentTypes
+    : [guessContentTypeFromPreset(preset, platformLabelLower)];
+  return types[((dayIndex % types.length) + types.length) % types.length]!;
 }
 
 export function isValidPresetId(id: string): id is ContentPlatformPresetId {

@@ -12,7 +12,8 @@
   --surf-200: 51 65 85;
   --surf-300: 71 85 105;
   --surf-400: 100 116 139;
-  --surf-500: 100 116 139;
+  /** Muted UI copy (legible on white at small sizes) */
+  --surf-500: 82 82 91;
   --surf-600: 148 163 184;
   --surf-700: 203 213 225;
   --surf-750: 226 232 240;
@@ -103,10 +104,21 @@ input:-webkit-autofill:focus {
     @apply bg-gradient-to-r from-primary-300 via-primary-400 to-accent-300 bg-clip-text text-transparent;
   }
   .nav-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-surface-400 hover:text-surface-100 hover:bg-surface-700/60 transition-all duration-200 text-sm font-medium;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-surface-750/80 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-700/60 transition-all duration-200 text-sm font-medium;
   }
   .nav-link.active {
-    @apply bg-primary-500/20 text-primary-200 border border-primary-400/40 shadow-lg shadow-primary-900/30;
+    @apply bg-primary-500/15 text-primary-800 border border-primary-500/35 shadow-sm dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-400/40 dark:shadow-lg dark:shadow-primary-900/30;
+  }
+  /** Inline links on light panels: dark purple in light theme, bright in dark theme */
+  .link-on-surface {
+    @apply font-medium text-primary-700 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300;
+  }
+  /** Muted helper / legend text that must stay readable on white */
+  .text-ui-muted {
+    @apply text-slate-600 dark:text-surface-400;
+  }
+  .text-ui-subtle {
+    @apply text-slate-500 dark:text-surface-500;
   }
 }
 
