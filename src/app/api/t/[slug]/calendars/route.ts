@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isContentStudioEnabledForUser } from "@/lib/contentStudio";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -11,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     where: {
       companyId: user.companyId,
       isArchived: false,
-      OR: [{ type: "ORG" }, { ownerUserId: user.userId }],
+      OR: [{ type: "ORG" }, { type: "CHANNEL" }, { ownerUserId: user.userId }],
     },
     orderBy: [{ type: "asc" }, { createdAt: "asc" }],
   });
@@ -26,10 +27,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     const body = await req.json();
-    const type = body?.type === "ORG" ? "ORG" : "PERSONAL";
+    const rawType = body?.type;
+    const type =
+      rawType === "ORG" || rawType === "PERSONAL" || rawType === "CHANNEL" ? rawType : "PERSONAL";
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const color = typeof body?.color === "string" ? body.color : "#22c55e";
+    const contentChannel =
+      typeof body?.contentChannel === "string" && body.contentChannel.trim()
+        ? body.contentChannel.trim().slice(0, 64)
+        : null;
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+
+    if (type === "CHANNEL") {
+      const ok = await isContentStudioEnabledForUser(user.companyId, user.userId);
+      if (!ok) return NextResponse.json({ error: "Content Studio add-on is not enabled" }, { status: 403 });
+      if (!user.isSuperAdmin && user.level !== 1) {
+        return NextResponse.json({ error: "Only workspace admins can create channel calendars" }, { status: 403 });
+      }
+    }
 
     if (type === "ORG") {
       if (!user.isSuperAdmin && user.level !== 1) {
@@ -48,6 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         name,
         color,
         type,
+        ...(type === "CHANNEL" && contentChannel ? { contentChannel } : {}),
       },
     });
     return NextResponse.json({ success: true, data: created }, { status: 201 });

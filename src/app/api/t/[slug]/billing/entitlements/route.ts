@@ -36,10 +36,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const chatAddon = Boolean(billing?.chatAddonEnabled);
   const recAddon = Boolean(billing?.recurringAddonEnabled);
+  const contentAddon = Boolean(billing?.contentStudioAddonEnabled);
   const aiAddon = Boolean(billing?.aiAddonEnabled);
   // Company may enable add-ons via billing only; modules array is kept in sync in most flows but can drift.
   const showChatNav = paidOk && (chatAddon || company.modules.includes("chat"));
   const showRecurringNav = paidOk && (recAddon || company.modules.includes("recurring"));
+  const showContentStudioNav = paidOk && (contentAddon || company.modules.includes("content"));
   const aiSeatsUsed =
     aiAddon && paidOk ? await countUsersWithEffectiveAi(company.id) : 0;
 
@@ -55,6 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     isSuperAdmin: user.isSuperAdmin,
     showChatNav,
     showRecurringNav,
+    showContentStudioNav,
     aiSeatsUsed,
   });
 }

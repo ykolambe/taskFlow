@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
       chatAddonAccess: Boolean(user.chatAddonAccess),
       recurringAddonAccess: Boolean(user.recurringAddonAccess),
       aiAddonAccess: Boolean(user.aiAddonAccess),
+      contentStudioAddonAccess: Boolean(user.contentStudioAddonAccess),
     });
 
     const res = NextResponse.json(

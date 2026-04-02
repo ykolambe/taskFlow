@@ -25,6 +25,8 @@ interface CompanyBilling {
   chatPricePerSeat: number | null;
   recurringAddonEnabled: boolean;
   recurringPricePerSeat: number | null;
+  contentStudioAddonEnabled: boolean;
+  contentStudioPricePerSeat: number | null;
   seatsLimit: number | null;
   billingEmail: string | null;
   notes: string | null;
@@ -133,6 +135,9 @@ export default function CompanyDetail({ company }: { company: Company }) {
     chatPricePerSeat: b?.chatPricePerSeat !== null && b?.chatPricePerSeat !== undefined ? String(b.chatPricePerSeat) : "",
     recurringAddonEnabled: b?.recurringAddonEnabled ?? false,
     recurringPricePerSeat: b?.recurringPricePerSeat !== null && b?.recurringPricePerSeat !== undefined ? String(b.recurringPricePerSeat) : "",
+    contentStudioAddonEnabled: b?.contentStudioAddonEnabled ?? false,
+    contentStudioPricePerSeat:
+      b?.contentStudioPricePerSeat !== null && b?.contentStudioPricePerSeat !== undefined ? String(b.contentStudioPricePerSeat) : "",
     seatsLimit: b?.seatsLimit !== null && b?.seatsLimit !== undefined ? String(b.seatsLimit) : "",
     billingEmail: b?.billingEmail ?? "",
     notes: b?.notes ?? "",
@@ -247,6 +252,9 @@ export default function CompanyDetail({ company }: { company: Company }) {
           chatPricePerSeat: billingForm.chatPricePerSeat === "" ? null : Number(billingForm.chatPricePerSeat),
           recurringAddonEnabled: billingForm.recurringAddonEnabled,
           recurringPricePerSeat: billingForm.recurringPricePerSeat === "" ? null : Number(billingForm.recurringPricePerSeat),
+          contentStudioAddonEnabled: billingForm.contentStudioAddonEnabled,
+          contentStudioPricePerSeat:
+            billingForm.contentStudioPricePerSeat === "" ? null : Number(billingForm.contentStudioPricePerSeat),
           seatsLimit: billingForm.seatsLimit === "" ? null : Number(billingForm.seatsLimit),
           billingEmail: billingForm.billingEmail || null,
           notes: billingForm.notes || null,
@@ -960,6 +968,38 @@ export default function CompanyDetail({ company }: { company: Company }) {
                   value={billingForm.recurringPricePerSeat}
                   onChange={(e) => setBillingForm({ ...billingForm, recurringPricePerSeat: e.target.value })}
                   placeholder="e.g. 2.99"
+                />
+              </div>
+
+              <div className="border border-surface-700 rounded-xl p-4 bg-surface-750/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-100">Content Studio Add-on</p>
+                    <p className="text-xs text-surface-500">Channel calendars, editorial workflow, and approvals.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBillingForm({
+                        ...billingForm,
+                        contentStudioAddonEnabled: !billingForm.contentStudioAddonEnabled,
+                      })
+                    }
+                    className={`w-12 h-6 rounded-full transition-all relative ${billingForm.contentStudioAddonEnabled ? "bg-primary-500" : "bg-surface-600"}`}
+                  >
+                    <div
+                      className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${billingForm.contentStudioAddonEnabled ? "left-6" : "left-0.5"}`}
+                    />
+                  </button>
+                </div>
+                <Input
+                  label="Content Studio Price / Seat"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.contentStudioPricePerSeat}
+                  onChange={(e) => setBillingForm({ ...billingForm, contentStudioPricePerSeat: e.target.value })}
+                  placeholder="e.g. 5.99"
                 />
               </div>
             </div>

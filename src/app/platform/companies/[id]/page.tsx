@@ -50,6 +50,8 @@ export default async function CompanyDetailPage({
           chatPricePerSeat: company.billing.chatPricePerSeat,
           recurringAddonEnabled: company.billing.recurringAddonEnabled,
           recurringPricePerSeat: company.billing.recurringPricePerSeat,
+          contentStudioAddonEnabled: company.billing.contentStudioAddonEnabled,
+          contentStudioPricePerSeat: company.billing.contentStudioPricePerSeat,
           seatsLimit: company.billing.seatsLimit,
           billingEmail: company.billing.billingEmail,
           notes: company.billing.notes,

@@ -77,6 +77,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     }
     nextData.aiAddonAccess = Boolean(body.aiAddonAccess);
   }
+  if (currentUser.isSuperAdmin && billing && body.contentStudioAddonAccess !== undefined) {
+    if (!billing.contentStudioAddonEnabled) {
+      return NextResponse.json({ error: "Company does not have the Content Studio add-on." }, { status: 400 });
+    }
+    nextData.contentStudioAddonAccess = Boolean(body.contentStudioAddonAccess);
+  }
 
   const shouldSyncManagers =
     currentUser.isSuperAdmin &&

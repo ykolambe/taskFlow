@@ -60,6 +60,7 @@ export interface User {
   chatAddonAccess?: boolean;
   recurringAddonAccess?: boolean;
   aiAddonAccess?: boolean;
+  contentStudioAddonAccess?: boolean;
   isActive: boolean;
   createdAt: string;
   roleLevel: RoleLevel;
@@ -142,8 +143,17 @@ export interface RecurringTask {
   assignee: UserBrief;
 }
 
-export type CalendarType = "ORG" | "PERSONAL";
-export type CalendarEntryKind = "GOAL" | "MILESTONE";
+export type CalendarType = "ORG" | "PERSONAL" | "CHANNEL";
+export type CalendarEntryKind = "GOAL" | "MILESTONE" | "CONTENT";
+
+export type ContentEntryStatus =
+  | "IDEA"
+  | "DRAFT"
+  | "IN_REVIEW"
+  | "APPROVED"
+  | "READY_TO_PUBLISH"
+  | "PUBLISHED"
+  | "CANCELLED";
 
 export interface CalendarCollection {
   id: string;
@@ -152,6 +162,8 @@ export interface CalendarCollection {
   name: string;
   color: string;
   type: CalendarType;
+  /** When type is CHANNEL, e.g. LinkedIn vs Instagram */
+  contentChannel?: string | null;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -169,6 +181,11 @@ export interface CalendarEntry {
   startAt: string;
   endAt: string | null;
   isDone: boolean;
+  contentStatus?: ContentEntryStatus | null;
+  assigneeId?: string | null;
+  url?: string | null;
+  approvedById?: string | null;
+  approvedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

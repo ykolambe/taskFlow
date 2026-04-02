@@ -72,7 +72,7 @@ export default async function CalendarPage({
     where: {
       companyId: company.id,
       isArchived: false,
-      OR: [{ type: "ORG" }, { ownerUserId: user.userId }],
+      OR: [{ type: "ORG" }, { type: "CHANNEL" }, { ownerUserId: user.userId }],
     },
     orderBy: [{ type: "asc" }, { createdAt: "asc" }],
   });
@@ -84,6 +84,16 @@ export default async function CalendarPage({
     },
     orderBy: { startAt: "asc" },
   });
+
+  // User-friendly: hide empty CHANNEL calendars from the focus list.
+  const visibleChannelIds = new Set(
+    calendarEntries.filter((e) => e.kind === "CONTENT").map((e) => e.calendarId)
+  );
+  const visibleCalendarIdSet = new Set(
+    calendars.filter((c) => (c.type !== "CHANNEL" ? true : visibleChannelIds.has(c.id))).map((c) => c.id)
+  );
+  const visibleCalendars = calendars.filter((c) => visibleCalendarIdSet.has(c.id));
+  const visibleCalendarEntries = calendarEntries.filter((e) => visibleCalendarIdSet.has(e.calendarId));
 
   const pendingApprovals = await countPendingApprovalsForUser(company.id, user.userId);
 
@@ -100,8 +110,8 @@ export default async function CalendarPage({
         user={user}
         tasks={tasks as any}
         recurringTasks={recurringTasks as any}
-        calendars={calendars as any}
-        calendarEntries={calendarEntries as any}
+        calendars={visibleCalendars as any}
+        calendarEntries={visibleCalendarEntries as any}
         slug={slug}
       />
     </TenantLayout>

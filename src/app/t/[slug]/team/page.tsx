@@ -93,6 +93,7 @@ export default async function TeamServerPage({
           chat: company.billing?.chatAddonEnabled ?? false,
           recurring: company.billing?.recurringAddonEnabled ?? false,
           ai: company.billing?.aiAddonEnabled ?? false,
+          contentStudio: company.billing?.contentStudioAddonEnabled ?? false,
         }}
         workloadRows={workloadRows}
       />

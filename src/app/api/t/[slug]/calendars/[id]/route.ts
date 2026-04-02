@@ -8,7 +8,7 @@ async function getAccessibleCalendar(id: string, companyId: string, userId: stri
       id,
       companyId,
       isArchived: false,
-      OR: [{ type: "ORG" }, { ownerUserId: userId }],
+      OR: [{ type: "ORG" }, { type: "CHANNEL" }, { ownerUserId: userId }],
     },
   });
 }
@@ -25,8 +25,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
   const name = typeof body?.name === "string" ? body.name.trim() : undefined;
   const color = typeof body?.color === "string" ? body.color : undefined;
 
-  if (cal.type === "ORG" && !user.isSuperAdmin && user.level !== 1) {
-    return NextResponse.json({ error: "Only top-level users can edit org calendar" }, { status: 403 });
+  if ((cal.type === "ORG" || cal.type === "CHANNEL") && !user.isSuperAdmin && user.level !== 1) {
+    return NextResponse.json({ error: "Only top-level users can edit this shared calendar" }, { status: 403 });
   }
   if (cal.type === "PERSONAL" && cal.ownerUserId !== user.userId) {
     return NextResponse.json({ error: "Only owner can edit personal calendar" }, { status: 403 });
@@ -50,8 +50,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const cal = await getAccessibleCalendar(id, user.companyId, user.userId);
   if (!cal) return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
 
-  if (cal.type === "ORG" && !user.isSuperAdmin && user.level !== 1) {
-    return NextResponse.json({ error: "Only top-level users can archive org calendar" }, { status: 403 });
+  if ((cal.type === "ORG" || cal.type === "CHANNEL") && !user.isSuperAdmin && user.level !== 1) {
+    return NextResponse.json({ error: "Only top-level users can archive this shared calendar" }, { status: 403 });
   }
   if (cal.type === "PERSONAL" && cal.ownerUserId !== user.userId) {
     return NextResponse.json({ error: "Only owner can archive personal calendar" }, { status: 403 });

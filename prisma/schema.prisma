@@ -126,6 +126,7 @@ model User {
   chatAddonAccess     Boolean @default(true)
   recurringAddonAccess Boolean @default(true)
   aiAddonAccess       Boolean @default(false)
+  contentStudioAddonAccess Boolean @default(false)
   isActive     Boolean  @default(true)
   uiTheme      UiTheme    @default(DARK)
   uiFontScale  UiFontScale @default(MEDIUM)
@@ -154,6 +155,9 @@ model User {
   dmChannelsAsHigh   Channel[] @relation("ChannelDmHigh")
   calendars          CalendarCollection[] @relation("CalendarOwner")
   calendarEntries    CalendarEntry[] @relation("CalendarEntryCreator")
+  calendarMembers    CalendarMember[]
+  contentEntriesAssigned CalendarEntry[] @relation("ContentEntryAssignee")
+  contentEntriesApproved CalendarEntry[] @relation("ContentEntryApprovedBy")
   passwordResetTokens PasswordResetToken[]
   pushSubscriptions   PushSubscription[]
   scheduledPushesCreated ScheduledPush[] @relation("TenantScheduledPushCreator")
@@ -274,6 +278,7 @@ model CalendarCollection {
   name        String
   color       String       @default("#22c55e")
   type        CalendarType @default(PERSONAL)
+  contentChannel String?
   isArchived  Boolean      @default(false)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -281,10 +286,34 @@ model CalendarCollection {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   owner   User?   @relation("CalendarOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   entries CalendarEntry[]
+  members CalendarMember[]
 
   @@index([companyId, type, isArchived])
   @@index([ownerUserId, isArchived])
   @@map("calendar_collections")
+}
+
+enum CalendarMemberRole {
+  VIEW
+  EDIT
+  PUBLISH
+  ADMIN
+}
+
+model CalendarMember {
+  id         String             @id @default(cuid())
+  calendarId String
+  userId     String
+  role       CalendarMemberRole @default(EDIT)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  calendar CalendarCollection @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, userId])
+  @@index([userId])
+  @@map("calendar_members")
 }
 
 model CalendarEntry {
@@ -299,26 +328,46 @@ model CalendarEntry {
   startAt     DateTime
   endAt       DateTime?
   isDone      Boolean           @default(false)
+  contentStatus ContentEntryStatus?
+  assigneeId    String?
+  url           String?
+  approvedById  String?
+  approvedAt    DateTime?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   calendar CalendarCollection @relation(fields: [calendarId], references: [id], onDelete: Cascade)
   creator  User               @relation("CalendarEntryCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignee User?              @relation("ContentEntryAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  approvedBy User?            @relation("ContentEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([companyId, startAt])
   @@index([calendarId, startAt])
+  @@index([assigneeId])
   @@map("calendar_entries")
 }
 
 enum CalendarType {
   ORG
   PERSONAL
+  CHANNEL
 }
 
 enum CalendarEntryKind {
   GOAL
   MILESTONE
+  CONTENT
+}
+
+enum ContentEntryStatus {
+  IDEA
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  READY_TO_PUBLISH
+  PUBLISHED
+  CANCELLED
 }
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────
@@ -648,6 +697,8 @@ model CompanyBilling {
   chatPricePerSeat   Float?
   recurringAddonEnabled Boolean @default(false)
   recurringPricePerSeat Float?
+  contentStudioAddonEnabled Boolean @default(false)
+  contentStudioPricePerSeat Float?
   seatsLimit         Int?                           // null = unlimited
   billingEmail       String?
   notes              String?

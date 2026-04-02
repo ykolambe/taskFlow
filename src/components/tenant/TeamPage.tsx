@@ -26,7 +26,7 @@ interface Props {
   slug: string;
   companyId: string;
   /** Company has purchased these add-ons (Pro); super admin assigns per user below */
-  billingAddons?: { chat: boolean; recurring: boolean; ai: boolean };
+  billingAddons?: { chat: boolean; recurring: boolean; ai: boolean; contentStudio: boolean };
   workloadRows?: TeamWorkloadRow[];
 }
 
@@ -53,7 +53,7 @@ export default function TeamPage({
   hierarchyTiers = [],
   slug,
   companyId,
-  billingAddons = { chat: false, recurring: false, ai: false },
+  billingAddons = { chat: false, recurring: false, ai: false, contentStudio: false },
   workloadRows = [],
 }: Props) {
   const router = useRouter();
@@ -142,7 +142,7 @@ export default function TeamPage({
 
   const patchUserAddon = async (
     target: User,
-    key: "chatAddonAccess" | "recurringAddonAccess" | "aiAddonAccess",
+    key: "chatAddonAccess" | "recurringAddonAccess" | "aiAddonAccess" | "contentStudioAddonAccess",
     value: boolean
   ) => {
     setAddonSaving(true);
@@ -680,7 +680,7 @@ export default function TeamPage({
                     {selectedUser.isSuperAdmin ? "Remove Super Admin" : "Make Super Admin"}
                   </Button>
                 </div>
-                {(billingAddons.chat || billingAddons.recurring || billingAddons.ai) && (
+                {(billingAddons.chat || billingAddons.recurring || billingAddons.ai || billingAddons.contentStudio) && (
                   <div className="bg-surface-800 border border-surface-700 rounded-xl p-3 space-y-2 text-left">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-400">
                       Paid add-ons (this user)
@@ -736,6 +736,18 @@ export default function TeamPage({
                           checked={effectiveAiAccess(selectedUser, hierarchyTiers)}
                           disabled={addonSaving || tierGrantsAi(selectedUser, hierarchyTiers)}
                           onChange={(e) => void patchUserAddon(selectedUser, "aiAddonAccess", e.target.checked)}
+                        />
+                      </label>
+                    )}
+                    {billingAddons.contentStudio && (
+                      <label className="flex items-center justify-between gap-2 text-sm text-surface-200 cursor-pointer">
+                        <span>Content Studio</span>
+                        <input
+                          type="checkbox"
+                          className="rounded border-surface-600"
+                          checked={selectedUser.contentStudioAddonAccess ?? false}
+                          disabled={addonSaving}
+                          onChange={(e) => void patchUserAddon(selectedUser, "contentStudioAddonAccess", e.target.checked)}
                         />
                       </label>
                     )}

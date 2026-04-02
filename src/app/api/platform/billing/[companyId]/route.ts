@@ -53,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       chatPricePerSeat,
       recurringAddonEnabled,
       recurringPricePerSeat,
+      contentStudioAddonEnabled,
+      contentStudioPricePerSeat,
       seatsLimit,
       billingEmail,
       notes,
@@ -81,6 +83,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(recurringPricePerSeat !== undefined && {
           recurringPricePerSeat: recurringPricePerSeat === null || recurringPricePerSeat === "" ? null : Number(recurringPricePerSeat),
         }),
+        ...(contentStudioAddonEnabled !== undefined && { contentStudioAddonEnabled: Boolean(contentStudioAddonEnabled) }),
+        ...(contentStudioPricePerSeat !== undefined && {
+          contentStudioPricePerSeat:
+            contentStudioPricePerSeat === null || contentStudioPricePerSeat === "" ? null : Number(contentStudioPricePerSeat),
+        }),
         ...(seatsLimit !== undefined && {
           seatsLimit: seatsLimit === null || seatsLimit === "" ? null : Number(seatsLimit),
         }),
@@ -103,6 +110,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         recurringAddonEnabled: recurringAddonEnabled ?? false,
         recurringPricePerSeat:
           recurringPricePerSeat !== undefined && recurringPricePerSeat !== "" ? Number(recurringPricePerSeat) : null,
+        contentStudioAddonEnabled: contentStudioAddonEnabled ?? false,
+        contentStudioPricePerSeat:
+          contentStudioPricePerSeat !== undefined && contentStudioPricePerSeat !== ""
+            ? Number(contentStudioPricePerSeat)
+            : null,
         seatsLimit: seatsLimit !== undefined && seatsLimit !== "" ? Number(seatsLimit) : null,
         billingEmail: billingEmail || null,
         notes: notes || null,
@@ -111,6 +123,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         subscriptionStatus: subscriptionStatus ?? "active",
       },
     });
+
+    if (contentStudioAddonEnabled !== undefined) {
+      const co = await prisma.company.findUnique({ where: { id: companyId }, select: { modules: true } });
+      if (co) {
+        const m = new Set(co.modules);
+        if (contentStudioAddonEnabled) m.add("content");
+        else m.delete("content");
+        await prisma.company.update({ where: { id: companyId }, data: { modules: [...m] } });
+      }
+    }
 
     return NextResponse.json({ success: true, billing });
   } catch (err) {

@@ -21,6 +21,7 @@ import {
   Lightbulb,
   CreditCard,
   ClipboardList,
+  PenLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Avatar from "@/components/ui/Avatar";
@@ -86,7 +87,7 @@ export default function TenantLayout({
   pendingApprovals = 0,
 }: TenantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [navPremium, setNavPremium] = useState<{ chat: boolean; recurring: boolean } | null>(null);
+  const [navPremium, setNavPremium] = useState<{ chat: boolean; recurring: boolean; content: boolean } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -96,7 +97,11 @@ export default function TenantLayout({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled && d && typeof d.showChatNav === "boolean") {
-          setNavPremium({ chat: d.showChatNav, recurring: d.showRecurringNav });
+          setNavPremium({
+            chat: d.showChatNav,
+            recurring: d.showRecurringNav,
+            content: Boolean(d.showContentStudioNav),
+          });
         }
       })
       .catch(() => {});
@@ -113,8 +118,10 @@ export default function TenantLayout({
 
   const companyChatOk = navPremium === null ? modules.includes("chat") : navPremium.chat;
   const companyRecOk = navPremium === null ? modules.includes("recurring") : navPremium.recurring;
+  const companyContentOk = navPremium === null ? modules.includes("content") : navPremium.content;
   const chatNav = companyChatOk && Boolean(user.chatAddonAccess);
   const recurringNav = companyRecOk && Boolean(user.recurringAddonAccess);
+  const contentStudioNav = companyContentOk && Boolean(user.contentStudioAddonAccess);
 
   const navItems = [
     { href: `/t/${slug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, show: true },
@@ -129,6 +136,12 @@ export default function TenantLayout({
     { href: `/t/${slug}/org`, label: "Org Chart", icon: GitBranch, show: modules.includes("org") },
     { href: `/t/${slug}/chat`, label: "Team Chat", icon: Bell, show: chatNav },
     { href: `/t/${slug}/calendar`, label: "Calendar", icon: Calendar, show: modules.includes("tasks") },
+    {
+      href: `/t/${slug}/content`,
+      label: "Content",
+      icon: PenLine,
+      show: contentStudioNav,
+    },
     { href: `/t/${slug}/recurring`, label: "Recurring", icon: RotateCcw, show: recurringNav },
     { href: `/t/${slug}/ideas`, label: "Idea Board", icon: Lightbulb, show: true },
     {

@@ -33,6 +33,7 @@ export interface TenantTokenPayload {
   chatAddonAccess?: boolean;
   recurringAddonAccess?: boolean;
   aiAddonAccess?: boolean;
+  contentStudioAddonAccess?: boolean;
 }
 
 export type TokenPayload = PlatformTokenPayload | TenantTokenPayload;
@@ -124,6 +125,7 @@ export async function getTenantUserFresh(
         chatAddonAccess: true,
         recurringAddonAccess: true,
         aiAddonAccess: true,
+        contentStudioAddonAccess: true,
         uiTheme: true,
         uiFontScale: true,
       },
@@ -137,9 +139,10 @@ export async function getTenantUserFresh(
       email: dbUser.email,
       avatarUrl: dbUser.avatarUrl ?? null,
       isSuperAdmin: Boolean(dbUser.isSuperAdmin),
-      chatAddonAccess: dbUser.chatAddonAccess,
-      recurringAddonAccess: dbUser.recurringAddonAccess,
-      aiAddonAccess: dbUser.aiAddonAccess,
+        chatAddonAccess: dbUser.chatAddonAccess,
+        recurringAddonAccess: dbUser.recurringAddonAccess,
+        aiAddonAccess: dbUser.aiAddonAccess,
+        contentStudioAddonAccess: dbUser.contentStudioAddonAccess,
       uiTheme: dbUser.uiTheme,
       uiFontScale: dbUser.uiFontScale,
     };

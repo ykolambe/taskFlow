@@ -47,6 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       chatAddonAccess: user.chatAddonAccess,
       recurringAddonAccess: user.recurringAddonAccess,
       aiAddonAccess: user.aiAddonAccess,
+      contentStudioAddonAccess: user.contentStudioAddonAccess,
     });
 
     const res = NextResponse.json(

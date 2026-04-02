@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Calendar, RotateCcw, AlertCircle, Plus, Target, Flag, Check, Trash2, X,
+  FileText,
 } from "lucide-react";
 import { TenantTokenPayload } from "@/lib/auth";
 import { Task, RecurringTask, CalendarCollection, CalendarEntry } from "@/types";
@@ -18,14 +19,15 @@ import {
 interface CalendarEvent {
   id: string;
   title: string;
-  type: "task" | "recurring" | "goal";
+  type: "task" | "recurring" | "goal" | "content";
   status?: string;
   priority?: string;
   color?: string;
   taskId?: string;
   calendarId?: string;
   notes?: string;
-  kind?: "GOAL" | "MILESTONE";
+  kind?: "GOAL" | "MILESTONE" | "CONTENT";
+  contentStatus?: string;
   isDone?: boolean;
   isOverdue?: boolean;
   isMyTask?: boolean;
@@ -142,6 +144,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   const calendarById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
   const selectedCalendar = calendarById.get(selectedCalendarId);
   const workspaceMode = selectedCalendar?.type === "ORG";
+  const channelCalendar = selectedCalendar?.type === "CHANNEL";
 
   /** Workspace: full team workload. Personal calendars: only your tasks (no recurring on the grid). */
   const scopedTasks = useMemo(() => {
@@ -199,21 +202,35 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
       }
     }
 
-    // Goals / milestones — only for the focused calendar; color follows calendar (not stale entry color)
+    // Goals / milestones / content — only for the focused calendar; color follows calendar (not stale entry color)
     for (const goal of calendarEntries) {
       if (goal.calendarId !== selectedCalendarId) continue;
       const cal = calendarById.get(goal.calendarId);
       const d = new Date(goal.startAt);
-      addEvent(d, {
-        id: goal.id,
-        title: goal.title,
-        type: "goal",
-        color: cal?.color ?? goal.color,
-        calendarId: goal.calendarId,
-        notes: goal.notes ?? undefined,
-        kind: goal.kind,
-        isDone: goal.isDone,
-      });
+      if (goal.kind === "CONTENT") {
+        addEvent(d, {
+          id: goal.id,
+          title: goal.title,
+          type: "content",
+          color: cal?.color ?? goal.color,
+          calendarId: goal.calendarId,
+          notes: goal.notes ?? undefined,
+          kind: "CONTENT",
+          contentStatus: goal.contentStatus ?? undefined,
+          isDone: goal.isDone,
+        });
+      } else {
+        addEvent(d, {
+          id: goal.id,
+          title: goal.title,
+          type: "goal",
+          color: cal?.color ?? goal.color,
+          calendarId: goal.calendarId,
+          notes: goal.notes ?? undefined,
+          kind: goal.kind,
+          isDone: goal.isDone,
+        });
+      }
     }
 
     return map;
@@ -249,6 +266,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
   const selectedTasks = selectedEvents.filter((e) => e.type === "task");
   const selectedRecurring = selectedEvents.filter((e) => e.type === "recurring");
   const selectedGoals = selectedEvents.filter((e) => e.type === "goal");
+  const selectedContent = selectedEvents.filter((e) => e.type === "content");
 
   // ── Week view helpers ────────────────────────────────────────────────────
 
@@ -322,7 +340,13 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
 
   async function deleteGoalEntry(ev: CalendarEvent) {
     if (!ev.calendarId) return;
-    const ok = window.confirm(`Delete "${ev.title}" (${ev.kind === "MILESTONE" ? "Milestone" : "Goal"})?`);
+    const kindLabel =
+      ev.type === "content"
+        ? "Content"
+        : ev.kind === "MILESTONE"
+          ? "Milestone"
+          : "Goal";
+    const ok = window.confirm(`Delete "${ev.title}" (${kindLabel})?`);
     if (!ok) return;
     setDeletingEntryId(ev.id);
     try {
@@ -442,7 +466,15 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
               <span className="font-mono text-[11px]">{selectedCalendar.color}</span>
             </span>
             ).{" "}
-            {workspaceMode ? (
+            {channelCalendar ? (
+              <>
+                Channel calendars show content and your own tasks. Manage posts in{" "}
+                <Link href={`/t/${slug}/content`} className="text-primary-400 hover:text-primary-300">
+                  Content Studio
+                </Link>
+                .
+              </>
+            ) : workspaceMode ? (
               <>Team tasks and recurring schedules are included.</>
             ) : (
               <>Only tasks assigned to you are shown; switch to Workspace for the full team.</>
@@ -470,64 +502,66 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
         </button>
       </div>
 
-      {/* Add goal — tied to focused calendar color */}
-      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-surface-300 uppercase tracking-wide">
-            Add goal / milestone
-            {selectedCalendar ? (
-              <span className="font-normal text-surface-500 normal-case ml-2">
-                on <span className="text-surface-300">{calendarLabel(selectedCalendar)}</span>
-              </span>
-            ) : null}
-          </p>
-          <div className="flex items-center gap-2 text-xs text-surface-500">
-            <span>Preview</span>
-            <span
-              className="h-6 w-14 rounded-lg border border-surface-600 shadow-inner"
-              style={{ backgroundColor: selectedCalendar?.color ?? "#22c55e" }}
+      {/* Add goal — tied to focused calendar color (not used for channel calendars) */}
+      {!channelCalendar && (
+        <div className="bg-surface-800 border border-surface-700 rounded-2xl p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-surface-300 uppercase tracking-wide">
+              Add goal / milestone
+              {selectedCalendar ? (
+                <span className="font-normal text-surface-500 normal-case ml-2">
+                  on <span className="text-surface-300">{calendarLabel(selectedCalendar)}</span>
+                </span>
+              ) : null}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-surface-500">
+              <span>Preview</span>
+              <span
+                className="h-6 w-14 rounded-lg border border-surface-600 shadow-inner"
+                style={{ backgroundColor: selectedCalendar?.color ?? "#22c55e" }}
+              />
+            </div>
+          </div>
+          <input
+            value={goalTitle}
+            onChange={(e) => setGoalTitle(e.target.value)}
+            placeholder="Title"
+            className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+          />
+          <textarea
+            value={goalNotes}
+            onChange={(e) => setGoalNotes(e.target.value)}
+            placeholder="Notes (optional)"
+            rows={2}
+            className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={goalKind}
+              onChange={(e) => setGoalKind(e.target.value as "GOAL" | "MILESTONE")}
+              className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
+            >
+              <option value="GOAL">Goal</option>
+              <option value="MILESTONE">Milestone</option>
+            </select>
+            <input
+              type="date"
+              value={goalDate}
+              onChange={(e) => setGoalDate(e.target.value)}
+              className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
             />
+            <button
+              type="button"
+              onClick={() => void createGoal()}
+              disabled={creatingGoal || !goalTitle.trim() || !selectedCalendarId}
+              className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-40 transition-colors"
+              style={{ backgroundColor: selectedCalendar?.color ?? "#059669" }}
+            >
+              {creatingGoal ? "Saving…" : "Add"}
+            </button>
           </div>
         </div>
-        <input
-          value={goalTitle}
-          onChange={(e) => setGoalTitle(e.target.value)}
-          placeholder="Title"
-          className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
-        />
-        <textarea
-          value={goalNotes}
-          onChange={(e) => setGoalNotes(e.target.value)}
-          placeholder="Notes (optional)"
-          rows={2}
-          className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={goalKind}
-            onChange={(e) => setGoalKind(e.target.value as "GOAL" | "MILESTONE")}
-            className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
-          >
-            <option value="GOAL">Goal</option>
-            <option value="MILESTONE">Milestone</option>
-          </select>
-          <input
-            type="date"
-            value={goalDate}
-            onChange={(e) => setGoalDate(e.target.value)}
-            className="bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs"
-          />
-          <button
-            type="button"
-            onClick={() => void createGoal()}
-            disabled={creatingGoal || !goalTitle.trim() || !selectedCalendarId}
-            className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-40 transition-colors"
-            style={{ backgroundColor: selectedCalendar?.color ?? "#059669" }}
-          >
-            {creatingGoal ? "Saving…" : "Add"}
-          </button>
-        </div>
-      </div>
+      )}
 
       {view === "month" ? (
         <div className="space-y-4">
@@ -557,6 +591,7 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                 const taskEvents = events.filter((e) => e.type === "task");
                 const recurringEvents = events.filter((e) => e.type === "recurring");
                 const goalEvents = events.filter((e) => e.type === "goal");
+                const contentEvents = events.filter((e) => e.type === "content");
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
                 const isCurrentMonth = isSameMonth(day, currentDate);
                 const todayFlag = isToday(day);
@@ -613,6 +648,14 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                       {goalEvents.slice(0, 1).map((ev) => (
                         <div key={ev.id} className="text-[9px] font-medium px-1 py-0.5 rounded truncate leading-tight" style={{ backgroundColor: (ev.color ?? "#22c55e") + "25", color: ev.color ?? "#22c55e" }}>
                           {ev.kind === "MILESTONE" ? "◆" : "◎"} {ev.title}
+                        </div>
+                      ))}
+                      {contentEvents.slice(0, 1).map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="text-[9px] font-medium px-1 py-0.5 rounded truncate leading-tight border border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
+                        >
+                          ▪ {ev.title}
                         </div>
                       ))}
                       {events.length > 3 && (
@@ -749,6 +792,36 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
                         disabled={deletingEntryId === ev.id}
                         className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
                         title="Delete goal/milestone"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Content (channel) */}
+                  {selectedContent.map((ev) => (
+                    <div key={ev.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
+                      <FileText className="w-3.5 h-3.5 flex-shrink-0 text-cyan-400" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-surface-200 group-hover:text-surface-100 truncate">
+                          {ev.title}
+                        </p>
+                        <span className="text-[10px] font-semibold text-cyan-400/90">
+                          Content{ev.contentStatus ? ` · ${ev.contentStatus.replace(/_/g, " ")}` : ""}
+                        </span>
+                        {ev.notes && <p className="text-[10px] text-surface-500 mt-0.5 truncate">{ev.notes}</p>}
+                      </div>
+                      <Link
+                        href={`/t/${slug}/content`}
+                        className="text-[11px] text-primary-400 hover:text-primary-300 shrink-0"
+                      >
+                        Studio
+                      </Link>
+                      <button
+                        onClick={() => void deleteGoalEntry(ev)}
+                        disabled={deletingEntryId === ev.id}
+                        className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
+                        title="Delete content"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -892,6 +965,10 @@ export default function CalendarView({ user, tasks, recurringTasks, calendars, c
           <div className="w-2.5 h-2.5 rounded border border-emerald-500/50 bg-emerald-500/20" />
           Goals / milestones (focused calendar)
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded border border-cyan-500/40 bg-cyan-500/15" />
+          Content (channel)
+        </div>
       </div>
     </div>
   );
@@ -1003,6 +1080,27 @@ function WeekView({
                     disabled={deletingEntryId === ev.id}
                     className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
                     title="Delete goal/milestone"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : ev.type === "content" ? (
+                <div key={ev.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-750 transition-colors group">
+                  <FileText className="w-4 h-4 flex-shrink-0 text-cyan-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate text-surface-200 group-hover:text-surface-100">{ev.title}</p>
+                    <p className="text-[10px] text-cyan-400/80 mt-0.5">
+                      Content{ev.contentStatus ? ` · ${ev.contentStatus.replace(/_/g, " ")}` : ""}
+                    </p>
+                  </div>
+                  <Link href={`/t/${slug}/content`} className="text-[11px] text-primary-400 shrink-0">
+                    Studio
+                  </Link>
+                  <button
+                    onClick={() => void onDeleteGoalEntry(ev)}
+                    disabled={deletingEntryId === ev.id}
+                    className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-surface-700 disabled:opacity-40"
+                    title="Delete content"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
