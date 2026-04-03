@@ -27,6 +27,12 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import PushNotificationSettings from "@/components/tenant/PushNotificationSettings";
+import {
+  TENANT_LIGHT_BRIGHTNESS_KEY,
+  LIGHT_BRIGHTNESS_MIN,
+  LIGHT_BRIGHTNESS_MAX,
+  LIGHT_BRIGHTNESS_DEFAULT,
+} from "@/components/layout/TenantLightBrightness";
 
 interface Props {
   user: TenantTokenPayload;
@@ -70,11 +76,35 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
   const [uiTheme, setUiTheme] = useState<UiTheme>(initialData.uiTheme);
   const [uiFontScale, setUiFontScale] = useState<UiFontScale>(initialData.uiFontScale);
   const [savingAppearance, setSavingAppearance] = useState(false);
+  const [lightBrightness, setLightBrightness] = useState(LIGHT_BRIGHTNESS_DEFAULT);
 
   useEffect(() => {
     setUiTheme(initialData.uiTheme);
     setUiFontScale(initialData.uiFontScale);
   }, [initialData.uiTheme, initialData.uiFontScale]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TENANT_LIGHT_BRIGHTNESS_KEY);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) setLightBrightness(Math.min(LIGHT_BRIGHTNESS_MAX, Math.max(LIGHT_BRIGHTNESS_MIN, n)));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setLightBrightnessPersist = (value: number) => {
+    const v = Math.min(LIGHT_BRIGHTNESS_MAX, Math.max(LIGHT_BRIGHTNESS_MIN, value));
+    setLightBrightness(v);
+    try {
+      localStorage.setItem(TENANT_LIGHT_BRIGHTNESS_KEY, String(v));
+      window.dispatchEvent(new Event("tenant-light-brightness-change"));
+    } catch {
+      /* ignore */
+    }
+  };
 
   const saveAppearance = async (patch: Partial<{ uiTheme: UiTheme; uiFontScale: UiFontScale }>) => {
     setSavingAppearance(true);
@@ -244,6 +274,32 @@ export default function ProfilePage({ user, slug, initialData }: Props) {
             </button>
           </div>
         </div>
+
+        {uiTheme === "LIGHT" && (
+          <div className="space-y-2">
+            <span className="text-xs font-medium text-surface-600 dark:text-surface-400 flex items-center gap-1.5">
+              <Sun className="w-3.5 h-3.5 opacity-80" /> Light mode brightness
+            </span>
+            <p className="text-[11px] text-surface-500 dark:text-surface-500">
+              Softer lowers background glare; brighter lifts page and panel backgrounds. Saved on this browser only.
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-surface-500 w-12 shrink-0">Softer</span>
+              <input
+                type="range"
+                min={LIGHT_BRIGHTNESS_MIN}
+                max={LIGHT_BRIGHTNESS_MAX}
+                step={1}
+                value={lightBrightness}
+                onChange={(e) => setLightBrightnessPersist(parseInt(e.target.value, 10))}
+                className="flex-1 h-2 accent-primary-600 rounded-lg appearance-none bg-surface-700/50"
+                aria-label="Light theme brightness"
+              />
+              <span className="text-[10px] text-surface-500 w-12 text-right shrink-0">Brighter</span>
+            </div>
+            <p className="text-[11px] text-surface-500 tabular-nums">{lightBrightness}%</p>
+          </div>
+        )}
 
         <div className="space-y-2">
           <span className="text-xs font-medium text-surface-600 dark:text-surface-400 flex items-center gap-1.5">

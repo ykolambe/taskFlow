@@ -39,7 +39,7 @@ async function main() {
         name: "Acme Corp",
         slug: "acme",
         isActive: true,
-        modules: ["tasks", "team", "org", "approvals"],
+        modules: ["tasks", "team", "org", "approvals", "chat"],
       },
     });
 
@@ -214,6 +214,14 @@ async function main() {
     console.log(`   Access at:   http://localhost:3000/t/acme`);
   } else {
     console.log(`ℹ️  Demo company 'Acme Corp' already exists`);
+    const acmeExisting = await prisma.company.findUnique({ where: { slug: "acme" } });
+    if (acmeExisting && !acmeExisting.modules.includes("chat")) {
+      await prisma.company.update({
+        where: { id: acmeExisting.id },
+        data: { modules: [...acmeExisting.modules, "chat"] },
+      });
+      console.log(`✅ Added 'chat' to Acme modules (Team Chat bubble & nav)`);
+    }
   }
 
   console.log("\n🎉 Seed complete!");

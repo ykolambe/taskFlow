@@ -6,8 +6,10 @@ import {
   getPrimaryDirectSubordinateIds,
   getPrimarySubtreeIds,
 } from "@/lib/reportingLinks";
+import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { isExecutiveDashboardUser } from "@/lib/utils";
 import { countPendingApprovalsForUser } from "@/lib/approvalRequestCounts";
+import { isPaidSubscriptionAccessOk } from "@/lib/planEntitlements";
 import TenantLayout from "@/components/layout/TenantLayout";
 import TenantDashboard from "@/components/tenant/TenantDashboard";
 
@@ -40,6 +42,17 @@ export default async function DashboardPage({
   const teamAssigneeIds = visibleIds.filter((id) => id !== user.userId);
   const viewerRow = allUsers.find((u) => u.id === user.userId);
   const leaderQaEnabled = Boolean(viewerRow?.aiLeaderQaEnabled);
+
+  const paidOk = isPaidSubscriptionAccessOk(company.billing);
+  const chatAddon = Boolean(company.billing?.chatAddonEnabled);
+  const hasTeamChatAccess =
+    paidOk && (chatAddon || company.modules.includes("chat")) && Boolean(user.chatAddonAccess);
+
+  const leaderGptMergedInTeamChat =
+    hasTeamChatAccess &&
+    aiEnabled &&
+    leaderQaEnabled &&
+    (await isUserAiEnabled(company.id, user.userId));
 
   const openTaskBase = {
     companyId: company.id,
@@ -188,6 +201,7 @@ export default async function DashboardPage({
         executiveInsights={executiveInsights}
         aiEnabled={aiEnabled}
         leaderQaEnabled={leaderQaEnabled}
+        leaderGptMergedInTeamChat={leaderGptMergedInTeamChat}
       />
     </TenantLayout>
   );

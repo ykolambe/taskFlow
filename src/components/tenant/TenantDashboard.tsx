@@ -23,8 +23,6 @@ import DashboardCharts, { type PriorityCount } from "@/components/tenant/Dashboa
 import DashboardRecentTasks from "@/components/tenant/DashboardRecentTasks";
 import DashboardTaskRow from "@/components/tenant/DashboardTaskRow";
 import ExecutiveBriefCard from "@/components/tenant/ExecutiveBriefCard";
-import LeaderQaBubble from "@/components/tenant/LeaderQaBubble";
-
 interface Props {
   user: TenantTokenPayload;
   stats: { myTasks: number; teamTasks: number; pendingApprovals: number; overdueTasks: number };
@@ -38,6 +36,8 @@ interface Props {
   remindersHasMore: boolean;
   aiEnabled: boolean;
   leaderQaEnabled: boolean;
+  /** AI + LeaderGPT: quick link opens chat with ?ai=1. */
+  leaderGptMergedInTeamChat?: boolean;
   executiveInsights: {
     directReports: number;
     teamSize: number;
@@ -58,6 +58,7 @@ export default function TenantDashboard({
   remindersHasMore,
   aiEnabled,
   leaderQaEnabled,
+  leaderGptMergedInTeamChat = false,
   executiveInsights,
 }: Props) {
   // Trigger auto-generation of due recurring tasks silently on every dashboard visit
@@ -207,6 +208,17 @@ export default function TenantDashboard({
       {/* Quick actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
+          ...(leaderGptMergedInTeamChat
+            ? [
+                {
+                  href: `/t/${slug}/chat?ai=1`,
+                  icon: "✨",
+                  label: "LeaderGPT",
+                  color:
+                    "from-fuchsia-500/20 to-purple-600/10 border-fuchsia-500/35 hover:border-fuchsia-500/55",
+                },
+              ]
+            : []),
           { href: `/t/${slug}/tasks?new=1`, icon: "✅", label: "New Task", color: "from-primary-500/20 to-primary-600/10 border-primary-500/30 hover:border-primary-500/50" },
           { href: `/t/${slug}/calendar`, icon: "📅", label: "Calendar", color: "from-cyan-500/20 to-cyan-600/10 border-cyan-500/30 hover:border-cyan-500/50" },
           { href: `/t/${slug}/recurring`, icon: "🔁", label: "Recurring", color: "from-violet-500/20 to-violet-600/10 border-violet-500/30 hover:border-violet-500/50" },
@@ -220,8 +232,6 @@ export default function TenantDashboard({
           </Link>
         ))}
       </div>
-
-      {aiEnabled && leaderQaEnabled && <LeaderQaBubble slug={slug} />}
     </div>
   );
 }

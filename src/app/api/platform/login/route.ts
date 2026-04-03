@@ -12,7 +12,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
     }
 
-    const owner = await prisma.platformOwner.findUnique({ where: { email } });
+    const emailTrim = email.trim();
+    const owner = await prisma.platformOwner.findFirst({
+      where: { email: { equals: emailTrim, mode: "insensitive" } },
+    });
     if (!owner) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }

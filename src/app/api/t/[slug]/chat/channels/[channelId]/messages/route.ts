@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessTeamChatChannel } from "@/lib/teamChatAccess";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 type Params = { params: Promise<{ slug: string; channelId: string }> | { slug: string; channelId: string } };
@@ -21,36 +22,43 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    include: { roleLevel: true },
   });
   if (!channel || channel.companyId !== company.id) {
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
-  // DM: only the two participants.
-  if (channel.type === "DM") {
-    if (channel.dmUserLowId !== viewer.userId && channel.dmUserHighId !== viewer.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-  } else if (channel.type === "ROLE") {
-    const viewerRow = await prisma.user.findUnique({
-      where: { id: viewer.userId },
-      select: { roleLevel: { select: { level: true } } },
-    });
-    const viewerLevel = viewerRow?.roleLevel?.level ?? 999;
-    const roleLevel = channel.roleLevel?.level ?? 999;
-    if (viewerLevel > roleLevel) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const allowed = await canAccessTeamChatChannel({
+    channel: {
+      id: channel.id,
+      companyId: channel.companyId,
+      type: channel.type,
+      dmUserLowId: channel.dmUserLowId,
+      dmUserHighId: channel.dmUserHighId,
+    },
+    viewerUserId: viewer.userId,
+    companyId: company.id,
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
   const rawTake = parseInt(searchParams.get("take") ?? "50", 10);
   const take = Number.isFinite(rawTake) ? Math.min(Math.max(rawTake, 1), 100) : 50;
   const cursor = searchParams.get("cursor");
+  const qRaw = searchParams.get("q")?.trim() ?? "";
+  const q = qRaw.length > 200 ? qRaw.slice(0, 200) : qRaw;
 
   const messages = await prisma.channelMessage.findMany({
-    where: { companyId: company.id, channelId },
+    where: {
+      companyId: company.id,
+      channelId,
+      ...(q
+        ? {
+            body: { contains: q, mode: "insensitive" as const },
+          }
+        : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: take + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -78,7 +86,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   return NextResponse.json({
     success: true,
     data: sliced.reverse(), // oldest first for UI
-    meta: { take, hasMore, nextCursor },
+    meta: { take, hasMore, nextCursor, q: q || undefined },
   });
 }
 
@@ -98,26 +106,24 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    include: { roleLevel: true },
   });
   if (!channel || channel.companyId !== company.id) {
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
-  if (channel.type === "DM") {
-    if (channel.dmUserLowId !== viewer.userId && channel.dmUserHighId !== viewer.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-  } else if (channel.type === "ROLE") {
-    const viewerRow = await prisma.user.findUnique({
-      where: { id: viewer.userId },
-      select: { roleLevel: { select: { level: true } } },
-    });
-    const viewerLevel = viewerRow?.roleLevel?.level ?? 999;
-    const roleLevel = channel.roleLevel?.level ?? 999;
-    if (viewerLevel > roleLevel) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const allowed = await canAccessTeamChatChannel({
+    channel: {
+      id: channel.id,
+      companyId: channel.companyId,
+      type: channel.type,
+      dmUserLowId: channel.dmUserLowId,
+      dmUserHighId: channel.dmUserHighId,
+    },
+    viewerUserId: viewer.userId,
+    companyId: company.id,
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: { text?: string; attachments?: unknown };

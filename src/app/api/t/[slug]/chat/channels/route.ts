@@ -41,38 +41,29 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Chat is not available for your account." }, { status: 403 });
   }
 
-  // For V1 we expose all GLOBAL channels and any ROLE channels whose roleLevel is at/above the viewer
-  const viewerRow = await prisma.user.findUnique({
-    where: { id: viewer.userId },
-    select: { roleLevel: { select: { level: true } } },
-  });
-  const viewerLevel = viewerRow?.roleLevel?.level ?? 999;
-
   const { searchParams } = new URL(req.url);
   const excludeDm = searchParams.get("excludeDm") === "1" || searchParams.get("excludeDm") === "true";
+  if (excludeDm) {
+    return NextResponse.json({ success: true, data: [] });
+  }
 
+  // Direct messages + groups the viewer belongs to (no broadcast GLOBAL/ROLE/CUSTOM in this list).
   const channels = await prisma.channel.findMany({
     where: {
       companyId: company.id,
-      OR: excludeDm
-        ? [
-            { type: "GLOBAL" },
-            { type: "CUSTOM" },
-            { type: "ROLE", roleLevel: { level: { gte: viewerLevel } } },
-          ]
-        : [
-            { type: "GLOBAL" },
-            { type: "CUSTOM" },
-            { type: "ROLE", roleLevel: { level: { gte: viewerLevel } } },
-            {
-              type: "DM",
-              OR: [{ dmUserLowId: viewer.userId }, { dmUserHighId: viewer.userId }],
-            },
-          ],
+      OR: [
+        {
+          type: "DM",
+          OR: [{ dmUserLowId: viewer.userId }, { dmUserHighId: viewer.userId }],
+        },
+        {
+          type: "GROUP",
+          members: { some: { userId: viewer.userId } },
+        },
+      ],
     },
-    orderBy: [{ type: "asc" }, { name: "asc" }],
+    orderBy: [{ updatedAt: "desc" }],
     include: {
-      roleLevel: true,
       dmUserLow: {
         select: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true },
       },
@@ -81,6 +72,16 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
     },
   });
+
+  const groupChannelIds = channels.filter((c) => c.type === "GROUP").map((c) => c.id);
+  const viewerGroupRoles =
+    groupChannelIds.length > 0
+      ? await prisma.channelMember.findMany({
+          where: { channelId: { in: groupChannelIds }, userId: viewer.userId },
+          select: { channelId: true, role: true },
+        })
+      : [];
+  const viewerRoleByChannelId = new Map(viewerGroupRoles.map((r) => [r.channelId, r.role]));
 
   const channelIds = channels.map((c) => c.id);
   const recentMessages =
@@ -104,11 +105,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   const rows = channels.map((c) => {
-    if (c.type !== "DM") {
+    if (c.type === "GROUP") {
       const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
       const last = latestByChannel.get(c.id);
       return {
         ...rest,
+        viewerRole: viewerRoleByChannelId.get(c.id) ?? "MEMBER",
         lastMessageAt: last?.createdAt?.toISOString() ?? null,
         lastPreview: last ? previewFromMessage(last) : null,
       };

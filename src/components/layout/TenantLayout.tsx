@@ -22,12 +22,15 @@ import {
   CreditCard,
   ClipboardList,
   PenLine,
+  PanelLeftClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Avatar from "@/components/ui/Avatar";
 import { TenantTokenPayload } from "@/lib/auth";
 import toast from "react-hot-toast";
 import BillingStatusBanner from "@/components/tenant/BillingStatusBanner";
+import LeaderQaBubble from "@/components/tenant/LeaderQaBubble";
 
 export type TenantLayoutUser = TenantTokenPayload & { avatarUrl?: string | null };
 
@@ -87,9 +90,29 @@ export default function TenantLayout({
   pendingApprovals = 0,
 }: TenantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [navPremium, setNavPremium] = useState<{ chat: boolean; recurring: boolean; content: boolean } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+
+  const sidebarCollapseKey = `tenant-sidebar-collapsed-${slug}`;
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem(sidebarCollapseKey) === "1") {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarCollapseKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(sidebarCollapseKey, sidebarCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarCollapsed, sidebarCollapseKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,86 +188,129 @@ export default function TenantLayout({
     return pathname.startsWith(`${href}/`) && href !== `/t/${slug}/dashboard`;
   };
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Company branding */}
-      <div className="px-5 py-5 border-b border-surface-200/90 dark:border-surface-800/80">
-        <div className="flex items-center gap-3">
+  const SidebarContent = ({ collapsed, desktop }: { collapsed: boolean; desktop: boolean }) => (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Company branding + collapse (desktop only) */}
+      <div
+        className={cn(
+          "border-b border-surface-200/90 dark:border-surface-800/80 shrink-0",
+          collapsed && desktop ? "px-2 py-3 flex flex-col items-center gap-2" : "px-5 py-4"
+        )}
+      >
+        <div className={cn("flex items-center gap-3 w-full", collapsed && desktop && "flex-col justify-center")}>
           <CompanyMark size="md" companyName={companyName} companyLogoUrl={companyLogoUrl} />
-          <div className="min-w-0">
-            <p className="font-extrabold text-slate-900 dark:text-surface-50 text-sm truncate tracking-tight">{companyName}</p>
-            <p className="text-[10px] text-slate-600 dark:text-surface-500 font-semibold uppercase tracking-widest">{slug}</p>
-          </div>
+          {!(collapsed && desktop) && (
+            <div className="min-w-0 flex-1">
+              <p className="font-extrabold text-slate-900 dark:text-surface-50 text-sm truncate tracking-tight">{companyName}</p>
+              <p className="text-[10px] text-slate-600 dark:text-surface-500 font-semibold uppercase tracking-widest">{slug}</p>
+            </div>
+          )}
+          {desktop && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              className={cn(
+                "p-2 rounded-lg text-slate-500 hover:bg-surface-200/90 hover:text-slate-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-100 transition-colors shrink-0",
+                collapsed && "mx-auto"
+              )}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+            >
+              {collapsed ? <PanelRightOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className={cn("flex-1 py-4 space-y-0.5 overflow-y-auto min-h-0", collapsed && desktop ? "px-1.5" : "px-3")}>
         {navItems.map(({ href, label, icon: Icon, badge }) => {
           const active = isActive(href);
           return (
             <Link
               key={href}
               href={href}
+              title={collapsed && desktop ? label : undefined}
               onClick={() => setSidebarOpen(false)}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative",
+                "group flex items-center rounded-xl text-sm font-medium transition-all duration-150 relative",
+                collapsed && desktop ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
                 active
                   ? "bg-primary-100 text-primary-900 border border-primary-200/90 shadow-sm dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30 dark:shadow-sm dark:shadow-primary-900/20"
                   : "text-slate-700 hover:text-slate-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
               )}
             >
-              <Icon
-                className={cn(
-                  "w-4 h-4 flex-shrink-0 transition-colors",
-                  active
-                    ? "text-primary-700 dark:text-primary-300"
-                    : "text-slate-600 group-hover:text-slate-900 dark:text-surface-500 dark:group-hover:text-surface-300"
+              <span className="relative inline-flex">
+                <Icon
+                  className={cn(
+                    "w-4 h-4 flex-shrink-0 transition-colors",
+                    active
+                      ? "text-primary-700 dark:text-primary-300"
+                      : "text-slate-600 group-hover:text-slate-900 dark:text-surface-500 dark:group-hover:text-surface-300"
+                  )}
+                />
+                {collapsed && desktop && badge !== undefined && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold min-w-[14px] h-3.5 px-0.5 rounded-full flex items-center justify-center">
+                    {badge > 9 ? "9+" : badge}
+                  </span>
                 )}
-              />
-              <span className="flex-1">{label}</span>
-              {badge !== undefined && (
-                <span className="bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow shadow-red-900/40">
-                  {badge > 9 ? "9+" : badge}
-                </span>
+              </span>
+              {!(collapsed && desktop) && (
+                <>
+                  <span className="flex-1">{label}</span>
+                  {badge !== undefined && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow shadow-red-900/40">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                  {active && <ChevronRight className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />}
+                </>
               )}
-              {active && <ChevronRight className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />}
             </Link>
           );
         })}
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-3 border-t border-surface-200/90 dark:border-surface-800/80 space-y-0.5">
+      <div className={cn("py-3 border-t border-surface-200/90 dark:border-surface-800/80 space-y-0.5 shrink-0", collapsed && desktop ? "px-1.5" : "px-3")}>
         <Link
           href={`/t/${slug}/profile`}
+          title={collapsed && desktop ? "My Profile" : undefined}
           onClick={() => setSidebarOpen(false)}
           className={cn(
-            "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+            "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+            collapsed && desktop ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
             isActive(`/t/${slug}/profile`)
               ? "bg-primary-100 text-primary-900 border border-primary-200/90 dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30"
               : "text-slate-700 hover:text-slate-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
           )}
         >
           <UserCircle className="w-4 h-4 flex-shrink-0 text-slate-600 group-hover:text-slate-900 dark:text-surface-500 dark:group-hover:text-surface-300" />
-          <span className="flex-1">My Profile</span>
+          {!(collapsed && desktop) && <span className="flex-1">My Profile</span>}
         </Link>
         {user.isSuperAdmin && (
           <Link
             href={`/t/${slug}/billing`}
+            title={collapsed && desktop ? "Billing & Usage" : undefined}
             onClick={() => setSidebarOpen(false)}
             className={cn(
-              "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+              "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+              collapsed && desktop ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
               isActive(`/t/${slug}/billing`)
                 ? "bg-primary-100 text-primary-900 border border-primary-200/90 dark:bg-primary-500/20 dark:text-primary-200 dark:border-primary-500/30"
                 : "text-slate-700 hover:text-slate-900 hover:bg-surface-200/90 dark:text-surface-400 dark:hover:text-surface-100 dark:hover:bg-surface-800/80"
             )}
           >
             <CreditCard className="w-4 h-4 flex-shrink-0 text-slate-600 group-hover:text-slate-900 dark:text-surface-500 dark:group-hover:text-surface-300" />
-            <span className="flex-1">Billing & Usage</span>
+            {!(collapsed && desktop) && <span className="flex-1">Billing & Usage</span>}
           </Link>
         )}
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+        <div
+          className={cn(
+            "flex items-center rounded-xl py-2",
+            collapsed && desktop ? "flex-col gap-2 px-1" : "gap-3 px-3"
+          )}
+        >
           <Avatar
             firstName={user.firstName}
             lastName={user.lastName}
@@ -252,12 +318,14 @@ export default function TenantLayout({
             avatarUrl={user.avatarUrl ?? undefined}
             size="sm"
           />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-slate-900 dark:text-surface-200 truncate tracking-tight">
-              {user.firstName} {user.lastName}
-            </p>
-            <p className="text-[10px] text-slate-600 dark:text-surface-400 truncate">{user.email}</p>
-          </div>
+          {!(collapsed && desktop) && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-900 dark:text-surface-200 truncate tracking-tight">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="text-[10px] text-slate-600 dark:text-surface-400 truncate">{user.email}</p>
+            </div>
+          )}
           <button
             onClick={handleLogout}
             className="text-slate-700 hover:text-red-600 dark:text-surface-500 dark:hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-red-500/10 flex-shrink-0"
@@ -273,8 +341,13 @@ export default function TenantLayout({
   return (
     <div className="flex h-screen bg-surface-950 overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-60 flex-col bg-surface-900/95 border-r border-surface-200/90 dark:border-surface-800/70 flex-shrink-0 backdrop-blur-xl">
-        <SidebarContent />
+      <aside
+        className={cn(
+          "hidden lg:flex flex-col bg-surface-900/95 border-r border-surface-200/90 dark:border-surface-800/70 flex-shrink-0 backdrop-blur-xl transition-[width] duration-200 ease-out overflow-hidden",
+          sidebarCollapsed ? "w-[4.5rem]" : "w-60"
+        )}
+      >
+        <SidebarContent collapsed={sidebarCollapsed} desktop />
       </aside>
 
       {/* Mobile Sidebar Overlay */}
@@ -291,7 +364,7 @@ export default function TenantLayout({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <SidebarContent />
+            <SidebarContent collapsed={false} desktop={false} />
           </aside>
         </div>
       )}
@@ -327,7 +400,7 @@ export default function TenantLayout({
         </main>
 
         {/* Mobile Bottom Nav */}
-        <nav className="lg:hidden flex items-center bg-surface-900/95 border-t border-surface-200/90 dark:border-surface-800/70 px-2 py-1 backdrop-blur-xl">
+        <nav className="lg:hidden flex items-center bg-surface-900/95 border-t border-surface-200/90 dark:border-surface-800/70 px-2 py-1 backdrop-blur-xl z-30">
           {navItems.slice(0, 5).map(({ href, label, icon: Icon, badge }) => {
             const active = isActive(href);
             return (
@@ -352,6 +425,8 @@ export default function TenantLayout({
             );
           })}
         </nav>
+
+        {chatNav && <LeaderQaBubble slug={slug} openWithLeaderGpt={false} />}
       </div>
     </div>
   );

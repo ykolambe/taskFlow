@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getTenantUserFresh } from "@/lib/auth";
 import TenantThemeProvider from "@/components/layout/TenantThemeProvider";
+import TenantLightBrightness from "@/components/layout/TenantLightBrightness";
 
 type Props = { children: React.ReactNode; params: Promise<{ slug: string }> };
 
@@ -20,6 +21,7 @@ export default async function TenantRootLayout({ children, params }: Props) {
 
   return (
     <TenantThemeProvider uiTheme={uiTheme} uiFontScale={uiFontScale}>
+      <TenantLightBrightness uiTheme={uiTheme} />
       {children}
     </TenantThemeProvider>
   );

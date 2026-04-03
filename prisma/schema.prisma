@@ -53,6 +53,7 @@ model Company {
   userReminders    UserReminder[]
   channels         Channel[]
   channelMessages  ChannelMessage[]
+  channelMembers   ChannelMember[]
   calendars        CalendarCollection[]
   calendarEntries  CalendarEntry[]
   infraConfig      TenantInfraConfig?
@@ -159,6 +160,8 @@ model User {
   channelMessages    ChannelMessage[]
   dmChannelsAsLow    Channel[] @relation("ChannelDmLow")
   dmChannelsAsHigh   Channel[] @relation("ChannelDmHigh")
+  channelsCreated    Channel[] @relation("ChannelCreatedBy")
+  channelMemberships ChannelMember[]
   calendars          CalendarCollection[] @relation("CalendarOwner")
   calendarEntries    CalendarEntry[] @relation("CalendarEntryCreator")
   calendarMembers    CalendarMember[]
@@ -581,11 +584,13 @@ model Channel {
   companyId   String
   slug        String
   name        String
-  type        ChannelType @default(GLOBAL) // GLOBAL | ROLE | CUSTOM | DM
+  type        ChannelType @default(GLOBAL) // GLOBAL | ROLE | CUSTOM | DM | GROUP
   roleLevelId String?
   /// For type DM only: participant ids sorted lexicographically (low before high).
   dmUserLowId  String?
   dmUserHighId String?
+  /// For type GROUP: user who created the group (optional audit).
+  createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -593,12 +598,39 @@ model Channel {
   roleLevel  RoleLevel?       @relation(fields: [roleLevelId], references: [id])
   dmUserLow  User?            @relation("ChannelDmLow", fields: [dmUserLowId], references: [id], onDelete: Cascade)
   dmUserHigh User?            @relation("ChannelDmHigh", fields: [dmUserHighId], references: [id], onDelete: Cascade)
+  createdBy  User?            @relation("ChannelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   messages   ChannelMessage[]
+  members    ChannelMember[]
 
   @@unique([companyId, slug])
   @@index([companyId, dmUserLowId])
   @@index([companyId, dmUserHighId])
+  @@index([companyId, createdById])
   @@map("channels")
+}
+
+model ChannelMember {
+  id        String            @id @default(cuid())
+  companyId String
+  channelId String
+  userId    String
+  /// GROUP channels: admins can rename the group, add/remove members, and assign admin.
+  role      ChannelMemberRole @default(MEMBER)
+  createdAt DateTime          @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([companyId, userId])
+  @@index([channelId])
+  @@map("channel_members")
+}
+
+enum ChannelMemberRole {
+  MEMBER
+  ADMIN
 }
 
 model ChannelMessage {
@@ -625,6 +657,7 @@ enum ChannelType {
   ROLE
   CUSTOM
   DM
+  GROUP
 }
 
 // ─── Ideas (Brain Dump Board) ────────────────────────────────────────────────
