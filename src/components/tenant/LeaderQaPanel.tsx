@@ -8,9 +8,10 @@ import {
   X,
   Sparkles,
   SquarePen,
-  Menu,
   History,
   Trash2,
+  ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
@@ -124,6 +125,68 @@ function titleFromMessages(msgs: MsgTurn[]): string {
   return "New chat";
 }
 
+/** ChatGPT-style reveal for the main assistant text (client-side; API still returns full JSON). */
+function StreamingText({
+  text,
+  onComplete,
+  onProgress,
+  className,
+}: {
+  text: string;
+  onComplete: () => void;
+  onProgress?: () => void;
+  className?: string;
+}) {
+  const [shown, setShown] = useState("");
+  const onCompleteRef = useRef(onComplete);
+  const onProgressRef = useRef(onProgress);
+  onCompleteRef.current = onComplete;
+  onProgressRef.current = onProgress;
+
+  useEffect(() => {
+    setShown("");
+    if (!text) {
+      onCompleteRef.current();
+      return;
+    }
+    let i = 0;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const len = text.length;
+      const step = len > 1600 ? 8 : len > 600 ? 4 : len > 120 ? 2 : 1;
+      i = Math.min(len, i + step);
+      setShown(text.slice(0, i));
+      onProgressRef.current?.();
+      if (i < len) {
+        window.setTimeout(tick, 13);
+      } else {
+        onCompleteRef.current();
+      }
+    };
+    const start = window.setTimeout(tick, 48);
+    return () => {
+      cancelled = true;
+      clearTimeout(start);
+    };
+  }, [text]);
+
+  const cursor =
+    shown.length < text.length ? (
+      <span
+        className="inline-block w-[3px] h-[1.05em] ml-0.5 bg-primary-500/85 dark:bg-primary-400/90 align-middle rounded-sm animate-pulse"
+        aria-hidden
+      />
+    ) : null;
+
+  return (
+    <p className={className}>
+      {shown}
+      {cursor}
+    </p>
+  );
+}
+
 export default function LeaderQaPanel({ slug, userId, variant, onClose }: LeaderQaPanelProps) {
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -134,6 +197,8 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
   const [showHelp, setShowHelp] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** Assistant message id currently revealing with typewriter (only for freshly received replies). */
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyPopoverRef = useRef<HTMLDivElement>(null);
 
@@ -223,11 +288,20 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
     return null;
   }, [messages]);
 
+  const scrollThreadToEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, loading, showHelp]);
+    scrollThreadToEnd();
+  }, [messages, loading, showHelp, scrollThreadToEnd]);
+
+  const endAssistantStream = useCallback(() => {
+    setStreamingMessageId(null);
+  }, []);
 
   const startNewChat = () => {
     setBulkSecondConfirm(false);
@@ -248,6 +322,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
     });
     setSidebarOpen(false);
     setHistoryOpen(false);
+    setStreamingMessageId(null);
   };
 
   const selectSession = (id: string) => {
@@ -255,6 +330,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
     setChatState((cs) => (cs ? { ...cs, activeSessionId: id } : cs));
     setSidebarOpen(false);
     setHistoryOpen(false);
+    setStreamingMessageId(null);
   };
 
   const removeSession = (id: string, e: ReactMouseEvent) => {
@@ -295,7 +371,13 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         updateMessages((prev) => prev.slice(0, -1));
         return;
       }
-      updateMessages((prev) => [...prev, { id: newId(), role: "assistant", payload: j.data }]);
+      const assistantId = newId();
+      const payload = j.data as QaPayload;
+      updateMessages((prev) => [...prev, { id: assistantId, role: "assistant", payload }]);
+      const mode = payload?.mode;
+      if (mode === "qa" || mode === "clarification") {
+        setStreamingMessageId(assistantId);
+      }
       if (j.data?.source === "fallback") {
         toast("Used fallback answer based on deterministic metrics.");
       }
@@ -334,14 +416,16 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         return;
       }
       toast.success("Task created from AI proposal");
+      const confirmId = newId();
       updateMessages((prev) => {
         const next = [...prev];
         const last = next.pop();
         if (last?.role === "assistant" && "payload" in last) {
-          next.push({ id: newId(), role: "assistant", plainText: "Task created from your proposal." });
+          next.push({ id: confirmId, role: "assistant", plainText: "Task created from your proposal." });
         }
         return next;
       });
+      setStreamingMessageId(confirmId);
     } finally {
       setCreating(false);
     }
@@ -444,7 +528,9 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         <SquarePen className="w-4 h-4 shrink-0" />
         New chat
       </button>
-      <p className={cn("text-[10px] font-semibold uppercase tracking-wide px-2 mb-1", proseMuted)}>Chats</p>
+      <p className={cn("text-[10px] font-semibold uppercase tracking-wide px-2 mb-1", proseMuted)}>
+        Your conversations
+      </p>
       <ul className="space-y-0.5 overflow-y-auto flex-1 min-h-0">
         {sortedSessions.map((s) => {
           const active = chatState!.activeSessionId === s.id;
@@ -498,19 +584,37 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
   const headerBar = (
     <header
       className={cn(
-        "flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b shrink-0",
+        "flex items-center justify-between gap-1.5 px-2 sm:px-4 py-2.5 border-b shrink-0",
+        "pt-[max(0.25rem,env(safe-area-inset-top))] pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]",
         isFab ? "border-surface-800 bg-surface-900/95" : "border-slate-200/90 bg-white/90 dark:border-[#2a2538] dark:bg-[#1c1828]/95 backdrop-blur-sm"
       )}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-1 min-w-0 flex-1">
+        {!isFab && onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 p-2 rounded-xl text-slate-700 hover:bg-slate-200/90 active:bg-slate-300/80 dark:text-[#e9edef] dark:hover:bg-[#2a2538]"
+            aria-label="Back to team chats"
+            title="Team chats"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+        )}
         {!isFab && (
           <button
             type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-200/80 dark:text-[#9ca0b8] dark:hover:bg-[#2a2538]"
-            aria-label="Open chats"
+            onClick={() => setSidebarOpen((o) => !o)}
+            className={cn(
+              "shrink-0 p-2 rounded-xl transition-colors",
+              sidebarOpen
+                ? "text-primary-600 bg-primary-500/15 dark:text-primary-300 dark:bg-primary-500/15"
+                : "text-slate-500 hover:bg-slate-200/80 dark:text-[#9ca0b8] dark:hover:bg-[#2a2538]"
+            )}
+            aria-label={sidebarOpen ? "Hide LeaderGPT conversations" : "LeaderGPT conversations"}
+            title={sidebarOpen ? "Close conversation list" : "LeaderGPT chats"}
           >
-            <Menu className="w-5 h-5" />
+            <History className="w-5 h-5" />
           </button>
         )}
         <div
@@ -521,9 +625,11 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         >
           <Sparkles className="w-4 h-4" aria-hidden />
         </div>
-        <div className="min-w-0">
-          <p className={cn("text-sm font-semibold truncate", proseBody)}>LeaderGPT</p>
-          <p className={cn("text-[11px] truncate", proseMuted)}>Leadership Q&amp;A &amp; task actions</p>
+        <div className="min-w-0 flex-1">
+          <p className={cn("text-sm font-semibold truncate leading-tight", proseBody)}>LeaderGPT</p>
+          <p className={cn("text-[11px] truncate hidden sm:block", proseMuted)}>
+            Leadership Q&amp;A &amp; task actions
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
@@ -578,13 +684,13 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         >
           <Info className="w-4 h-4" />
         </button>
-        {onClose && (
+        {onClose && isFab && (
           <button
             type="button"
             onClick={onClose}
             className={cn(
               "p-2 rounded-lg transition-colors",
-              isFab ? "text-surface-400 hover:bg-surface-800 hover:text-surface-100" : "text-slate-500 hover:bg-slate-200/80 dark:text-[#9ca0b8] dark:hover:bg-[#2a2538] dark:hover:text-[#e9edef]"
+              "text-surface-400 hover:bg-surface-800 hover:text-surface-100"
             )}
             aria-label="Close"
           >
@@ -655,16 +761,26 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
               );
             }
             if ("plainText" in m) {
+              const streamPlain = streamingMessageId === m.id;
               return (
                 <div key={m.id} className="flex justify-start">
                   <div
                     className={cn(
-                      "max-w-[min(100%,85%)] rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[15px] leading-relaxed border",
+                      "max-w-[min(100%,85%)] rounded-2xl rounded-bl-md px-3.5 py-2.5 border",
                       cardBg,
                       proseBody
                     )}
                   >
-                    {m.plainText}
+                    {streamPlain ? (
+                      <StreamingText
+                        text={m.plainText}
+                        onComplete={endAssistantStream}
+                        onProgress={scrollThreadToEnd}
+                        className="text-[15px] leading-relaxed whitespace-pre-wrap"
+                      />
+                    ) : (
+                      <span className="text-[15px] leading-relaxed">{m.plainText}</span>
+                    )}
                   </div>
                 </div>
               );
@@ -674,6 +790,10 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
                 <div className="max-w-[min(100%,92%)] w-full space-y-3">
                   <PayloadBlock
                     payload={m.payload}
+                    messageId={m.id}
+                    streamingMessageId={streamingMessageId}
+                    onStreamComplete={endAssistantStream}
+                    onStreamProgress={scrollThreadToEnd}
                     isFab={isFab}
                     interactive={isLast}
                     creating={creating}
@@ -710,7 +830,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
       {/* Composer — fixed bottom, ChatGPT-style */}
       <div
         className={cn(
-          "shrink-0 border-t px-3 sm:px-4 pt-2 pb-3",
+          "shrink-0 border-t px-3 sm:px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
           isFab ? "border-surface-800 bg-surface-900" : "border-slate-200/90 bg-white/95 dark:border-[#2a2538] dark:bg-[#1c1828]/95 backdrop-blur-md"
         )}
       >
@@ -798,24 +918,38 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
     </div>
   ) : (
     <div className="flex flex-1 min-h-0 h-full w-full flex-row overflow-hidden bg-surface-950 dark:bg-[#13101c]">
-      <aside className={cn("hidden lg:flex w-[min(100%,260px)] max-w-[280px]", sessionSidebarClass)}>
-        {renderSessionRows(false)}
-      </aside>
       {sidebarOpen && (
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-            aria-label="Close menu"
+            className="fixed inset-0 z-40 bg-black/50"
+            aria-label="Close LeaderGPT conversation list"
             onClick={() => setSidebarOpen(false)}
           />
           <aside
             className={cn(
-              "fixed left-0 top-0 z-50 h-full w-[min(85vw,280px)] flex flex-col lg:hidden shadow-2xl",
+              "fixed left-0 top-0 z-50 h-full w-[min(85vw,280px)] flex flex-col shadow-2xl",
+              "pt-[env(safe-area-inset-top)]",
               sessionSidebarClass
             )}
           >
-            {renderSessionRows(false)}
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-between gap-2 border-b px-3 py-3",
+                "border-slate-200/90 dark:border-[#2a2538] bg-slate-100/95 dark:bg-[#1a1626]"
+              )}
+            >
+              <p className={cn("text-sm font-semibold truncate", proseBody)}>LeaderGPT chats</p>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="shrink-0 p-2 rounded-xl text-slate-600 hover:bg-slate-200/90 dark:text-[#e9edef] dark:hover:bg-[#2a2538]"
+                aria-label="Close conversation list"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{renderSessionRows(false)}</div>
           </aside>
         </>
       )}
@@ -829,6 +963,10 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
 
 function PayloadBlock({
   payload,
+  messageId,
+  streamingMessageId,
+  onStreamComplete,
+  onStreamProgress,
   isFab,
   interactive,
   creating,
@@ -841,6 +979,10 @@ function PayloadBlock({
   reasonLabel,
 }: {
   payload: QaPayload;
+  messageId: string;
+  streamingMessageId: string | null;
+  onStreamComplete: () => void;
+  onStreamProgress?: () => void;
   isFab: boolean;
   interactive: boolean;
   creating: boolean;
@@ -852,6 +994,8 @@ function PayloadBlock({
   canConfirmBulk: boolean;
   reasonLabel: (r: SkippedReason) => string;
 }) {
+  const streamThis = streamingMessageId === messageId;
+  const [metricsOpen, setMetricsOpen] = useState(false);
   const proseMuted = isFab ? "text-surface-400" : "text-slate-500 dark:text-[#9ca0b8]";
   const proseBody = isFab ? "text-surface-100" : "text-slate-900 dark:text-[#e9edef]";
   const cardBg = isFab ? "bg-surface-800/80 border-surface-700" : "bg-white/90 border-slate-200/90 dark:bg-[#1c1828] dark:border-[#2a2538]";
@@ -862,6 +1006,19 @@ function PayloadBlock({
   );
 
   if (payload.mode === "clarification") {
+    const msg = payload.message ?? "";
+    if (streamThis && msg) {
+      return (
+        <div className={bubble}>
+          <StreamingText
+            text={msg}
+            onComplete={onStreamComplete}
+            onProgress={onStreamProgress}
+            className={cn("text-sm", isFab ? "text-amber-300" : "text-amber-600 dark:text-amber-400")}
+          />
+        </div>
+      );
+    }
     return (
       <div className={bubble}>
         <p className={cn("text-sm", isFab ? "text-amber-300" : "text-amber-600 dark:text-amber-400")}>{payload.message}</p>
@@ -1001,6 +1158,19 @@ function PayloadBlock({
   }
 
   if (payload.mode === "qa" && payload.result) {
+    const answer = payload.result.answer ?? "";
+    if (streamThis && answer) {
+      return (
+        <div className={cn(bubble, "space-y-4")}>
+          <StreamingText
+            text={answer}
+            onComplete={onStreamComplete}
+            onProgress={onStreamProgress}
+            className={cn("whitespace-pre-wrap", proseBody)}
+          />
+        </div>
+      );
+    }
     return (
       <div className={cn(bubble, "space-y-4")}>
         <p className="whitespace-pre-wrap">{payload.result.answer}</p>
@@ -1024,26 +1194,45 @@ function PayloadBlock({
             ))}
           </ul>
         </div>
-        <div>
-          <p className={cn("text-[11px] uppercase tracking-wider mb-1 font-semibold", proseMuted)}>Cited metrics</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {payload.result.metrics.map((m) => (
-              <div
-                key={m.key}
-                className={cn(
-                  "rounded-xl px-2.5 py-2 border text-sm",
-                  isFab ? "bg-surface-900/50 border-surface-700" : "bg-slate-50 border-slate-200/80 dark:bg-[#13101c] dark:border-transparent"
-                )}
-              >
-                <p className={cn("text-[10px]", proseMuted)}>
-                  {m.key} · {m.window}
-                </p>
-                <p className="font-medium">
-                  {m.label}: {String(m.value)}
-                </p>
-              </div>
-            ))}
-          </div>
+        <div className="border-t border-slate-200/80 pt-3 mt-1 dark:border-surface-700/80">
+          <button
+            type="button"
+            onClick={() => setMetricsOpen((v) => !v)}
+            className="flex w-full items-center gap-2 text-left rounded-lg py-1 -mx-0.5 px-0.5 hover:bg-slate-100/80 dark:hover:bg-surface-800/60 transition-colors"
+            aria-expanded={metricsOpen}
+          >
+            <ChevronRight
+              className={cn(
+                "h-4 w-4 shrink-0 text-slate-500 dark:text-surface-400 transition-transform duration-200",
+                metricsOpen && "rotate-90"
+              )}
+              aria-hidden
+            />
+            <span className={cn("text-[11px] uppercase tracking-wider font-semibold", proseMuted)}>Cited metrics</span>
+            <span className={cn("text-[10px] font-normal normal-case tabular-nums", proseMuted)}>
+              ({payload.result.metrics.length})
+            </span>
+          </button>
+          {metricsOpen && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              {payload.result.metrics.map((m) => (
+                <div
+                  key={m.key}
+                  className={cn(
+                    "rounded-xl px-2.5 py-2 border text-sm",
+                    isFab ? "bg-surface-900/50 border-surface-700" : "bg-slate-50 border-slate-200/80 dark:bg-[#13101c] dark:border-transparent"
+                  )}
+                >
+                  <p className={cn("text-[10px]", proseMuted)}>
+                    {m.key} · {m.window}
+                  </p>
+                  <p className="font-medium">
+                    {m.label}: {String(m.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

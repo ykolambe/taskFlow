@@ -1055,14 +1055,10 @@ export default function TeamChatPage({
               slug={slug}
               userId={currentUserId}
               variant="inline"
-              onClose={
-                !isWide
-                  ? () => {
-                      setLeaderGptActive(false);
-                      setMobileChatOpen(false);
-                    }
-                  : undefined
-              }
+              onClose={() => {
+                setLeaderGptActive(false);
+                setMobileChatOpen(false);
+              }}
             />
           </div>
         )}
