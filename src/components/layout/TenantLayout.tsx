@@ -143,6 +143,8 @@ export default function TenantLayout({
   const companyRecOk = navPremium === null ? modules.includes("recurring") : navPremium.recurring;
   const companyContentOk = navPremium === null ? modules.includes("content") : navPremium.content;
   const chatNav = companyChatOk && Boolean(user.chatAddonAccess);
+  /** Floating shortcut to chat — redundant on the chat page itself. */
+  const isTeamChatPage = pathname === `/t/${slug}/chat`;
   const recurringNav = companyRecOk && Boolean(user.recurringAddonAccess);
   const contentStudioNav = companyContentOk && Boolean(user.contentStudioAddonAccess);
 
@@ -426,7 +428,7 @@ export default function TenantLayout({
           })}
         </nav>
 
-        {chatNav && <LeaderQaBubble slug={slug} openWithLeaderGpt={false} />}
+        {chatNav && !isTeamChatPage && <LeaderQaBubble slug={slug} openWithLeaderGpt={false} />}
       </div>
     </div>
   );
