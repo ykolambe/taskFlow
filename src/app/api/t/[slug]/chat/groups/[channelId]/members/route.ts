@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getGroupChannelForCompany, isGroupAdmin } from "@/lib/groupChat";
+import { canManageGroup, getGroupChannelForCompany } from "@/lib/groupChat";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const channel = await getGroupChannelForCompany(company.id, channelId);
   if (!channel) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!(await isGroupAdmin(channelId, viewer.userId))) {
-    return NextResponse.json({ error: "Only group admins can add people." }, { status: 403 });
+  if (!(await canManageGroup(channelId, viewer, channel))) {
+    return NextResponse.json({ error: "You don't have permission to add people to this group." }, { status: 403 });
   }
 
   let raw: unknown;

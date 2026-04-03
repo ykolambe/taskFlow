@@ -591,6 +591,8 @@ model Channel {
   dmUserHighId String?
   /// For type GROUP: user who created the group (optional audit).
   createdById String?
+  /// For type GROUP: optional photo shown in chat list and header.
+  avatarUrl   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

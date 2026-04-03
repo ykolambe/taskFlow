@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { countGroupAdmins, getGroupChannelForCompany, isGroupAdmin } from "@/lib/groupChat";
+import { canManageGroup, countGroupAdmins, getGroupChannelForCompany } from "@/lib/groupChat";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +35,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const channel = await getGroupChannelForCompany(company.id, channelId);
   if (!channel) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!(await isGroupAdmin(channelId, viewer.userId))) {
-    return NextResponse.json({ error: "Only group admins can change roles." }, { status: 403 });
+  if (!(await canManageGroup(channelId, viewer, channel))) {
+    return NextResponse.json({ error: "You don't have permission to change member roles." }, { status: 403 });
   }
 
   let raw: unknown;
@@ -105,8 +105,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const isSelf = targetUserId === viewer.userId;
-  if (!isSelf && !(await isGroupAdmin(channelId, viewer.userId))) {
-    return NextResponse.json({ error: "Only group admins can remove members." }, { status: 403 });
+  if (!isSelf && !(await canManageGroup(channelId, viewer, channel))) {
+    return NextResponse.json({ error: "You don't have permission to remove members from this group." }, { status: 403 });
   }
 
   if (!isSelf && target.role === "ADMIN") {

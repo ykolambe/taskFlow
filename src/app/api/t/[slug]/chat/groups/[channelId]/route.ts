@@ -2,16 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getGroupChannelForCompany, isGroupAdmin } from "@/lib/groupChat";
+import { canManageGroup, canManageGroupSync, getGroupChannelForCompany } from "@/lib/groupChat";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ slug: string; channelId: string }> | { slug: string; channelId: string } };
 
-const patchBodySchema = z.object({
-  name: z.string().min(1).max(120),
-});
+const patchBodySchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    avatarUrl: z.union([z.string(), z.null()]).optional(),
+  })
+  .refine((d) => d.name !== undefined || d.avatarUrl !== undefined, {
+    message: "Provide at least one of: name, avatarUrl",
+  });
+
+function parseStoredImageUrl(input: string | null): string | null {
+  if (input === null) return null;
+  const s = input.trim();
+  if (!s) return null;
+  if (s.length > 2048) return null;
+  if (s.startsWith("/") && !s.startsWith("//")) return s;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
 
 /** Group details: members and roles (any member). */
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -37,6 +57,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
   if (!myMembership) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const canManageMembers = canManageGroupSync({
+    membershipRole: myMembership.role,
+    viewerUserId: viewer.userId,
+    viewerIsSuperAdmin: viewer.isSuperAdmin,
+    channelCreatedById: channel.createdById,
+  });
+
   const members = await prisma.channelMember.findMany({
     where: { channelId },
     orderBy: [{ role: "desc" }, { createdAt: "asc" }],
@@ -60,7 +87,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
       id: channel.id,
       name: channel.name,
       createdById: channel.createdById,
+      avatarUrl: channel.avatarUrl,
       viewerRole: myMembership.role,
+      canManageMembers,
       members: members.map((m) => ({
         userId: m.userId,
         role: m.role,
@@ -70,7 +99,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
 }
 
-/** Rename group (admins only). */
+/** Update group name and/or photo (managers only). */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { slug, channelId } = await params;
   const viewer = await getTenantUser(slug);
@@ -88,8 +117,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const channel = await getGroupChannelForCompany(company.id, channelId);
   if (!channel) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!(await isGroupAdmin(channelId, viewer.userId))) {
-    return NextResponse.json({ error: "Only group admins can rename the group." }, { status: 403 });
+  if (!(await canManageGroup(channelId, viewer, channel))) {
+    return NextResponse.json(
+      { error: "You don't have permission to update this group." },
+      { status: 403 }
+    );
   }
 
   let raw: unknown;
@@ -104,11 +136,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const name = parsed.data.name.trim();
+  const data: { name?: string; avatarUrl?: string | null } = {};
+  if (parsed.data.name !== undefined) {
+    data.name = parsed.data.name.trim();
+  }
+  if (parsed.data.avatarUrl !== undefined) {
+    if (parsed.data.avatarUrl === null) {
+      data.avatarUrl = null;
+    } else {
+      const u = parseStoredImageUrl(parsed.data.avatarUrl);
+      if (u === null) {
+        return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+      }
+      data.avatarUrl = u;
+    }
+  }
+
   const updated = await prisma.channel.update({
     where: { id: channelId },
-    data: { name },
-    select: { id: true, name: true, slug: true, type: true, updatedAt: true },
+    data,
+    select: { id: true, name: true, slug: true, type: true, avatarUrl: true, updatedAt: true },
   });
 
   return NextResponse.json({ success: true, data: updated });

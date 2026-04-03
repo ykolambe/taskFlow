@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  Camera,
   MessageCircle,
   Paperclip,
   Search,
@@ -41,8 +42,12 @@ interface ChannelRow {
   createdAt: string;
   displayName?: string;
   peer?: PeerBrief | null;
-  /** Present for GROUP rows: your role (manage members / rename when ADMIN). */
+  /** Present for GROUP rows: your channel role (Member vs Admin badge). */
   viewerRole?: GroupMemberRole;
+  /** Present for GROUP rows: optional group photo. */
+  avatarUrl?: string | null;
+  /** True when you may rename, add/remove, and change roles (group admin, creator, or tenant super admin). */
+  canManageGroup?: boolean;
   lastMessageAt?: string | null;
   lastPreview?: string | null;
 }
@@ -87,6 +92,9 @@ interface Message {
 interface Props {
   slug: string;
   currentUserId: string;
+  currentUserFirstName: string;
+  currentUserLastName: string;
+  currentUserAvatarUrl: string | null;
   /** Pinned LeaderGPT row + inline panel (matches leader-qa API entitlements). */
   showLeaderGptInChat?: boolean;
 }
@@ -115,11 +123,6 @@ function formatChatListTime(iso: string | null | undefined): string {
   }
 }
 
-function groupInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "G";
-}
-
 /** Matches server preview string so the list updates instantly after send. */
 function buildPreviewFromMessage(m: Message): string {
   const parts: string[] = [];
@@ -140,6 +143,9 @@ function buildPreviewFromMessage(m: Message): string {
 export default function TeamChatPage({
   slug,
   currentUserId,
+  currentUserFirstName,
+  currentUserLastName,
+  currentUserAvatarUrl,
   showLeaderGptInChat = false,
 }: Props) {
   const searchParams = useSearchParams();
@@ -170,11 +176,14 @@ export default function TeamChatPage({
   const [groupSettingsName, setGroupSettingsName] = useState("");
   const [groupSettingsMembers, setGroupSettingsMembers] = useState<GroupDetailsMember[]>([]);
   const [groupSettingsViewerRole, setGroupSettingsViewerRole] = useState<GroupMemberRole>("MEMBER");
+  const [groupSettingsCanManage, setGroupSettingsCanManage] = useState(false);
+  const [groupSettingsAvatarUrl, setGroupSettingsAvatarUrl] = useState<string | null>(null);
   const [groupSettingsSearch, setGroupSettingsSearch] = useState("");
   const [groupSettingsSaving, setGroupSettingsSaving] = useState(false);
   const [stagedMedia, setStagedMedia] = useState<ChatMediaAttachment[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -513,6 +522,8 @@ export default function TeamChatPage({
         type: "GROUP",
         createdAt: d.createdAt ?? new Date().toISOString(),
         viewerRole: "ADMIN",
+        canManageGroup: true,
+        avatarUrl: d.avatarUrl ?? null,
         lastMessageAt: null,
         lastPreview: null,
       };
@@ -554,6 +565,21 @@ export default function TeamChatPage({
         setGroupSettingsName(d.name ?? "");
         setGroupSettingsMembers(d.members ?? []);
         setGroupSettingsViewerRole(d.viewerRole ?? "MEMBER");
+        setGroupSettingsAvatarUrl(d.avatarUrl ?? null);
+        const can = Boolean(d.canManageMembers);
+        setGroupSettingsCanManage(can);
+        setChannels((prev) =>
+          prev.map((c) =>
+            c.id === channelId && c.type === "GROUP"
+              ? { ...c, canManageGroup: can, avatarUrl: d.avatarUrl ?? null }
+              : c
+          )
+        );
+        setSelectedChannel((sel) =>
+          sel && sel.id === channelId
+            ? { ...sel, canManageGroup: can, avatarUrl: d.avatarUrl ?? null }
+            : sel
+        );
         return true;
       } finally {
         setGroupSettingsLoading(false);
@@ -589,13 +615,102 @@ export default function TeamChatPage({
         return;
       }
       const updatedName = j.data?.name ?? name;
+      const updatedAvatar = j.data?.avatarUrl;
       setChannels((prev) =>
-        prev.map((c) => (c.id === selectedChannel.id ? { ...c, name: updatedName } : c))
+        prev.map((c) =>
+          c.id === selectedChannel.id && c.type === "GROUP"
+            ? {
+                ...c,
+                name: updatedName,
+                ...(updatedAvatar !== undefined ? { avatarUrl: updatedAvatar } : {}),
+              }
+            : c
+        )
       );
       setSelectedChannel((sel) =>
-        sel && sel.id === selectedChannel.id ? { ...sel, name: updatedName } : sel
+        sel && sel.id === selectedChannel.id
+          ? {
+              ...sel,
+              name: updatedName,
+              ...(updatedAvatar !== undefined ? { avatarUrl: updatedAvatar } : {}),
+            }
+          : sel
       );
+      if (updatedAvatar !== undefined) setGroupSettingsAvatarUrl(updatedAvatar ?? null);
       toast.success("Group name updated");
+    } finally {
+      setGroupSettingsSaving(false);
+    }
+  };
+
+  const uploadGroupPicture = async (file: File) => {
+    if (!selectedChannel || selectedChannel.type !== "GROUP" || !groupSettingsCanManage) return;
+    setGroupSettingsSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const upRes = await fetch(`/api/upload?type=avatar&slug=${encodeURIComponent(slug)}`, {
+        method: "POST",
+        body: formData,
+      });
+      const upJ = await upRes.json();
+      if (!upRes.ok) {
+        toast.error(upJ.error || "Upload failed");
+        return;
+      }
+      const res = await fetch(`/api/t/${slug}/chat/groups/${selectedChannel.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: upJ.url }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        toast.error(j.error || "Could not save photo");
+        return;
+      }
+      const nextUrl = (j.data?.avatarUrl ?? upJ.url) as string | null;
+      setGroupSettingsAvatarUrl(nextUrl ?? null);
+      setChannels((prev) =>
+        prev.map((c) =>
+          c.id === selectedChannel.id && c.type === "GROUP" ? { ...c, avatarUrl: nextUrl ?? null } : c
+        )
+      );
+      setSelectedChannel((sel) =>
+        sel && sel.id === selectedChannel.id ? { ...sel, avatarUrl: nextUrl ?? null } : sel
+      );
+      toast.success("Group photo updated");
+      await loadChannels();
+    } finally {
+      setGroupSettingsSaving(false);
+      if (groupAvatarInputRef.current) groupAvatarInputRef.current.value = "";
+    }
+  };
+
+  const clearGroupPicture = async () => {
+    if (!selectedChannel || selectedChannel.type !== "GROUP" || !groupSettingsCanManage) return;
+    setGroupSettingsSaving(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/chat/groups/${selectedChannel.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: null }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        toast.error(j.error || "Could not remove photo");
+        return;
+      }
+      setGroupSettingsAvatarUrl(null);
+      setChannels((prev) =>
+        prev.map((c) =>
+          c.id === selectedChannel.id && c.type === "GROUP" ? { ...c, avatarUrl: null } : c
+        )
+      );
+      setSelectedChannel((sel) =>
+        sel && sel.id === selectedChannel.id ? { ...sel, avatarUrl: null } : sel
+      );
+      toast.success("Group photo removed");
+      await loadChannels();
     } finally {
       setGroupSettingsSaving(false);
     }
@@ -714,7 +829,7 @@ export default function TeamChatPage({
   const channelSubtitle = selectedChannel
     ? selectedChannel.type === "DM"
       ? "Direct message"
-      : selectedChannel.viewerRole === "ADMIN"
+      : selectedChannel.canManageGroup || selectedChannel.viewerRole === "ADMIN"
         ? "Group · You manage"
         : "Group"
     : "";
@@ -847,12 +962,13 @@ export default function TeamChatPage({
                         className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-[16px]"
                       />
                     ) : (
-                      <div
-                        className="w-[49px] h-[49px] rounded-full flex items-center justify-center flex-shrink-0 text-[17px] font-medium bg-primary-600/90 text-white dark:bg-[#5b5470]"
-                        aria-hidden
-                      >
-                        {groupInitials(c.name)}
-                      </div>
+                      <Avatar
+                        firstName={c.name}
+                        lastName=""
+                        avatarUrl={c.avatarUrl ?? null}
+                        size="md"
+                        className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-[16px]"
+                      />
                     )}
                     <div className="flex-1 min-w-0 flex gap-2">
                       <div className="flex-1 min-w-0">
@@ -970,9 +1086,13 @@ export default function TeamChatPage({
                   className="flex-shrink-0"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-[15px] font-semibold bg-primary-600/85 text-white dark:bg-[#5b5470]">
-                  {groupInitials(selectedChannel.name)}
-                </div>
+                <Avatar
+                  firstName={selectedChannel.name}
+                  lastName=""
+                  avatarUrl={selectedChannel.avatarUrl ?? null}
+                  size="md"
+                  className="flex-shrink-0 w-10 h-10 text-[15px]"
+                />
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-[16px] font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">{channelTitle}</p>
@@ -1030,10 +1150,13 @@ export default function TeamChatPage({
               )}
               {messages.map((m) => {
                 const mine = m.author.id === currentUserId;
+                const showMineAvatar =
+                  mine &&
+                  Boolean(currentUserAvatarUrl && String(currentUserAvatarUrl).trim() !== "");
                 return (
                   <div
                     key={m.id}
-                    className={cn("flex gap-1.5", mine ? "justify-end" : "justify-start")}
+                    className={cn("flex gap-1.5 items-end", mine ? "justify-end" : "justify-start")}
                   >
                     {!mine && (
                       <Avatar
@@ -1089,6 +1212,15 @@ export default function TeamChatPage({
                         <p className="text-[14.2px] whitespace-pre-wrap break-words leading-[1.45]">{m.body}</p>
                       ) : null}
                     </div>
+                    {showMineAvatar && (
+                      <Avatar
+                        firstName={currentUserFirstName}
+                        lastName={currentUserLastName}
+                        avatarUrl={currentUserAvatarUrl}
+                        size="xs"
+                        className="flex-shrink-0 mt-0.5 w-7 h-7"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -1298,7 +1430,7 @@ export default function TeamChatPage({
           setGroupSettingsSearch("");
         }}
         title="Group info"
-        description="Admins can rename the group, add or remove people, and assign admins."
+        description="People who can manage the group can set a photo, rename it, add or remove members, and assign admins."
         size="sm"
       >
         <div className="space-y-4 [font-family:system-ui,sans-serif]">
@@ -1306,16 +1438,59 @@ export default function TeamChatPage({
             <p className="text-sm text-surface-500 py-6 text-center">Loading…</p>
           ) : (
             <>
+              <div className="flex flex-col items-center gap-3 pb-4 border-b border-surface-700/60">
+                <input
+                  ref={groupAvatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadGroupPicture(f);
+                  }}
+                />
+                <Avatar
+                  firstName={groupSettingsName.trim() || "Group"}
+                  lastName=""
+                  avatarUrl={groupSettingsAvatarUrl}
+                  size="xl"
+                  className="ring-2 ring-surface-700/80"
+                />
+                {groupSettingsCanManage ? (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={groupSettingsSaving}
+                      onClick={() => groupAvatarInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-800 border border-surface-600 text-sm text-surface-100 hover:bg-surface-700 disabled:opacity-50"
+                    >
+                      <Camera className="w-4 h-4" aria-hidden />
+                      {groupSettingsAvatarUrl ? "Change photo" : "Add photo"}
+                    </button>
+                    {groupSettingsAvatarUrl ? (
+                      <button
+                        type="button"
+                        disabled={groupSettingsSaving}
+                        onClick={() => void clearGroupPicture()}
+                        className="text-sm text-surface-400 hover:text-red-400 disabled:opacity-50"
+                      >
+                        Remove photo
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
               <div>
                 <label className="block text-[11px] text-surface-500 mb-1">Group name</label>
                 <div className="flex gap-2">
                   <input
                     value={groupSettingsName}
                     onChange={(e) => setGroupSettingsName(e.target.value)}
-                    disabled={groupSettingsViewerRole !== "ADMIN" || groupSettingsSaving}
+                    disabled={!groupSettingsCanManage || groupSettingsSaving}
                     className="flex-1 bg-surface-800 border border-surface-700 rounded-xl px-3 py-2.5 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500 disabled:opacity-60"
                   />
-                  {groupSettingsViewerRole === "ADMIN" && (
+                  {groupSettingsCanManage && (
                     <button
                       type="button"
                       disabled={groupSettingsSaving || !groupSettingsName.trim()}
@@ -1328,7 +1503,7 @@ export default function TeamChatPage({
                 </div>
               </div>
 
-              {groupSettingsViewerRole === "ADMIN" && (
+              {groupSettingsCanManage && (
                 <div>
                   <label className="block text-[11px] text-surface-500 mb-1">Add people</label>
                   <div className="relative mb-2">
@@ -1377,7 +1552,7 @@ export default function TeamChatPage({
                   {groupSettingsMembers.map((m) => {
                     const groupAdminCount = groupSettingsMembers.filter((x) => x.role === "ADMIN").length;
                     const isSelf = m.userId === currentUserId;
-                    const canManage = groupSettingsViewerRole === "ADMIN" && !isSelf;
+                    const canManage = groupSettingsCanManage && !isSelf;
                     return (
                       <li
                         key={m.userId}

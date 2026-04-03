@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canManageGroupSync } from "@/lib/groupChat";
 import { isModuleEnabledForUser } from "@/lib/tenantRuntime";
 
 export const dynamic = "force-dynamic";
@@ -108,9 +109,16 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (c.type === "GROUP") {
       const { dmUserLow: _l, dmUserHigh: _h, ...rest } = c;
       const last = latestByChannel.get(c.id);
+      const vr = viewerRoleByChannelId.get(c.id) ?? "MEMBER";
       return {
         ...rest,
-        viewerRole: viewerRoleByChannelId.get(c.id) ?? "MEMBER",
+        viewerRole: vr,
+        canManageGroup: canManageGroupSync({
+          membershipRole: vr,
+          viewerUserId: viewer.userId,
+          viewerIsSuperAdmin: viewer.isSuperAdmin,
+          channelCreatedById: c.createdById,
+        }),
         lastMessageAt: last?.createdAt?.toISOString() ?? null,
         lastPreview: last ? previewFromMessage(last) : null,
       };

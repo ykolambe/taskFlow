@@ -46,6 +46,9 @@ export default async function ChatPage({
           <ChatPageClient
             slug={slug}
             currentUserId={user.userId}
+            currentUserFirstName={user.firstName}
+            currentUserLastName={user.lastName}
+            currentUserAvatarUrl={user.avatarUrl}
             showLeaderGptInChat={showLeaderGptInChat}
           />
         </Suspense>
