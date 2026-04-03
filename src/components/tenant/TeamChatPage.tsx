@@ -1053,6 +1053,7 @@ export default function TeamChatPage({
           <div className="flex flex-col flex-1 min-h-0 min-w-0 bg-surface-950 dark:bg-[#0f0d16]">
             <LeaderQaPanel
               slug={slug}
+              userId={currentUserId}
               variant="inline"
               onClose={
                 !isWide
