@@ -528,7 +528,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         <SquarePen className="w-4 h-4 shrink-0" />
         New chat
       </button>
-      <p className={cn("text-[10px] font-semibold uppercase tracking-wide px-2 mb-1", proseMuted)}>
+      <p className={cn("text-[0.625rem] font-semibold uppercase tracking-wide px-2 mb-1", proseMuted)}>
         Your conversations
       </p>
       <ul className="space-y-0.5 overflow-y-auto flex-1 min-h-0">
@@ -540,7 +540,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
                 type="button"
                 onClick={() => selectSession(s.id)}
                 className={cn(
-                  "flex-1 min-w-0 text-left rounded-lg px-2.5 py-2 text-[13px] leading-snug transition-colors",
+                  "flex-1 min-w-0 text-left rounded-lg px-2.5 py-2 text-[0.8125rem] leading-snug transition-colors",
                   active
                     ? "bg-white dark:bg-[#2a2538] text-slate-900 dark:text-[#e9edef] shadow-sm ring-1 ring-slate-200/80 dark:ring-[#3d3558]"
                     : "text-slate-700 dark:text-[#c4c2d4] hover:bg-slate-200/80 dark:hover:bg-[#2a2538]/80"
@@ -627,7 +627,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
         </div>
         <div className="min-w-0 flex-1">
           <p className={cn("text-sm font-semibold truncate leading-tight", proseBody)}>LeaderGPT</p>
-          <p className={cn("text-[11px] truncate hidden sm:block", proseMuted)}>
+          <p className={cn("text-[0.6875rem] truncate hidden sm:block", proseMuted)}>
             Leadership Q&amp;A &amp; task actions
           </p>
         </div>
@@ -750,7 +750,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
                 <div key={m.id} className="flex justify-end">
                   <div
                     className={cn(
-                      "max-w-[min(100%,85%)] rounded-2xl rounded-br-md px-3.5 py-2.5 text-[15px] leading-relaxed shadow-sm",
+                      "max-w-[min(100%,85%)] rounded-2xl rounded-br-md px-3.5 py-2.5 text-[0.9375rem] leading-relaxed shadow-sm",
                       "bg-primary-600 text-white",
                       "dark:bg-primary-700 dark:text-[#f4f4f5]"
                     )}
@@ -776,10 +776,10 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
                         text={m.plainText}
                         onComplete={endAssistantStream}
                         onProgress={scrollThreadToEnd}
-                        className="text-[15px] leading-relaxed whitespace-pre-wrap"
+                        className="text-[0.9375rem] leading-relaxed whitespace-pre-wrap"
                       />
                     ) : (
-                      <span className="text-[15px] leading-relaxed">{m.plainText}</span>
+                      <span className="text-[0.9375rem] leading-relaxed">{m.plainText}</span>
                     )}
                   </div>
                 </div>
@@ -851,7 +851,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
                     key={i}
                     type="button"
                     onClick={() => setQuestion(prompt)}
-                    className={cn("text-[11px] rounded-full px-2.5 py-1 transition-colors", chipClass)}
+                    className={cn("text-[0.6875rem] rounded-full px-2.5 py-1 transition-colors", chipClass)}
                   >
                     {prompt.slice(0, 42)}
                     {prompt.length > 42 ? "…" : ""}
@@ -881,7 +881,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
               placeholder="Message LeaderGPT…"
               rows={2}
               className={cn(
-                "flex-1 min-h-[52px] max-h-40 resize-none bg-transparent px-3.5 py-3 text-[15px] leading-relaxed focus:outline-none rounded-2xl",
+                "flex-1 min-h-[52px] max-h-40 resize-none bg-transparent px-3.5 py-3 text-[0.9375rem] leading-relaxed focus:outline-none rounded-2xl",
                 isFab
                   ? "text-surface-100 placeholder:text-surface-500"
                   : "text-slate-900 placeholder:text-slate-400 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
@@ -903,7 +903,7 @@ export default function LeaderQaPanel({ slug, userId, variant, onClose }: Leader
               </button>
             </div>
           </div>
-          <p className={cn("text-[10px] text-center mt-2", proseMuted)}>
+          <p className={cn("text-[0.625rem] text-center mt-2", proseMuted)}>
             AI can make mistakes. Verify important actions before confirming.
           </p>
         </div>
@@ -1000,7 +1000,7 @@ function PayloadBlock({
   const proseBody = isFab ? "text-surface-100" : "text-slate-900 dark:text-[#e9edef]";
   const cardBg = isFab ? "bg-surface-800/80 border-surface-700" : "bg-white/90 border-slate-200/90 dark:bg-[#1c1828] dark:border-[#2a2538]";
   const bubble = cn(
-    "rounded-2xl rounded-bl-md border px-3.5 py-3 text-[15px] leading-relaxed shadow-sm",
+    "rounded-2xl rounded-bl-md border px-3.5 py-3 text-[0.9375rem] leading-relaxed shadow-sm",
     cardBg,
     proseBody
   );
@@ -1061,14 +1061,14 @@ function PayloadBlock({
             </div>
           ))}
           {(payload.drafts?.length ?? 0) > 12 && (
-            <p className={cn("text-[11px]", proseMuted)}>+ {(payload.drafts?.length ?? 0) - 12} more</p>
+            <p className={cn("text-[0.6875rem]", proseMuted)}>+ {(payload.drafts?.length ?? 0) - 12} more</p>
           )}
         </div>
         {(payload.skipped?.length ?? 0) > 0 && (
           <div className={cn("rounded-xl p-2 space-y-1 border", isFab ? "border-surface-700 bg-surface-900/40" : "border-slate-200/80 dark:border-transparent")}>
             <p className={cn("text-xs font-semibold", proseBody)}>Skipped ({payload.skipped?.length})</p>
             {payload.skipped?.slice(0, 8).map((s, i) => (
-              <p key={i} className={cn("text-[11px]", proseMuted)}>
+              <p key={i} className={cn("text-[0.6875rem]", proseMuted)}>
                 {s.requested}: {reasonLabel(s.reason)}
               </p>
             ))}
@@ -1175,7 +1175,7 @@ function PayloadBlock({
       <div className={cn(bubble, "space-y-4")}>
         <p className="whitespace-pre-wrap">{payload.result.answer}</p>
         <div>
-          <p className={cn("text-[11px] uppercase tracking-wider mb-1 font-semibold", proseMuted)}>Top drivers</p>
+          <p className={cn("text-[0.6875rem] uppercase tracking-wider mb-1 font-semibold", proseMuted)}>Top drivers</p>
           <ul className="space-y-1">
             {payload.result.topDrivers.map((d, i) => (
               <li key={i} className={cn("text-sm", isFab ? "text-surface-300" : "text-slate-600 dark:text-[#c4c2d4]")}>
@@ -1185,7 +1185,7 @@ function PayloadBlock({
           </ul>
         </div>
         <div>
-          <p className={cn("text-[11px] uppercase tracking-wider mb-1 font-semibold", proseMuted)}>Actions</p>
+          <p className={cn("text-[0.6875rem] uppercase tracking-wider mb-1 font-semibold", proseMuted)}>Actions</p>
           <ul className="space-y-1">
             {payload.result.actions.map((a, i) => (
               <li key={i} className={cn("text-sm", isFab ? "text-surface-300" : "text-slate-600 dark:text-[#c4c2d4]")}>
@@ -1208,8 +1208,8 @@ function PayloadBlock({
               )}
               aria-hidden
             />
-            <span className={cn("text-[11px] uppercase tracking-wider font-semibold", proseMuted)}>Cited metrics</span>
-            <span className={cn("text-[10px] font-normal normal-case tabular-nums", proseMuted)}>
+            <span className={cn("text-[0.6875rem] uppercase tracking-wider font-semibold", proseMuted)}>Cited metrics</span>
+            <span className={cn("text-[0.625rem] font-normal normal-case tabular-nums", proseMuted)}>
               ({payload.result.metrics.length})
             </span>
           </button>
@@ -1223,7 +1223,7 @@ function PayloadBlock({
                     isFab ? "bg-surface-900/50 border-surface-700" : "bg-slate-50 border-slate-200/80 dark:bg-[#13101c] dark:border-transparent"
                   )}
                 >
-                  <p className={cn("text-[10px]", proseMuted)}>
+                  <p className={cn("text-[0.625rem]", proseMuted)}>
                     {m.key} · {m.window}
                   </p>
                   <p className="font-medium">

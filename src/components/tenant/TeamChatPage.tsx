@@ -843,7 +843,6 @@ export default function TeamChatPage({
     <div
       className={cn(
         "flex flex-col lg:flex-row flex-1 min-h-0 h-full overflow-hidden",
-        "[font-family:system-ui,'Segoe_UI',Roboto,'Helvetica_Neue',Arial,sans-serif]",
         "bg-surface-950 text-slate-900 dark:bg-[#13101c] dark:text-[#e9edef]"
       )}
     >
@@ -857,7 +856,7 @@ export default function TeamChatPage({
       >
         <div className="px-3 py-3 border-b border-slate-200/90 bg-surface-800/90 dark:border-[#2a2538] dark:bg-[#1c1828] space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-[19px] font-semibold tracking-tight text-slate-900 dark:text-[#e9edef]">Chats</h1>
+            <h1 className="text-[1.1875rem] font-semibold tracking-tight text-slate-900 dark:text-[#e9edef]">Chats</h1>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -894,7 +893,7 @@ export default function TeamChatPage({
               value={listSearch}
               onChange={(e) => setListSearch(e.target.value)}
               placeholder="Search chats or people in your org"
-              className="w-full rounded-lg bg-white border border-slate-200 pl-10 pr-3 py-2 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#1c1828] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
+              className="w-full rounded-lg bg-white border border-slate-200 pl-10 pr-3 py-2 text-[0.9375rem] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#1c1828] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
             />
           </div>
         </div>
@@ -923,8 +922,8 @@ export default function TeamChatPage({
                 <Sparkles className="w-6 h-6" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[16px] font-medium text-slate-900 dark:text-[#e9edef] leading-tight">LeaderGPT</p>
-                <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] mt-0.5 leading-snug">Leadership Q&amp;A and task actions</p>
+                <p className="text-base font-medium text-slate-900 dark:text-[#e9edef] leading-tight">LeaderGPT</p>
+                <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] mt-0.5 leading-snug">Leadership Q&amp;A and task actions</p>
               </div>
             </button>
           </div>
@@ -932,7 +931,7 @@ export default function TeamChatPage({
 
         <div className="flex-1 overflow-y-auto min-h-0">
           {filteredChannels.length === 0 && (
-            <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] px-4 py-8 text-center leading-relaxed">
+            <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] px-4 py-8 text-center leading-relaxed">
               {channels.length === 0
                 ? "No chats yet. Start a direct message or create a group."
                 : "No matches."}
@@ -959,7 +958,7 @@ export default function TeamChatPage({
                         lastName={c.peer.lastName}
                         avatarUrl={c.peer.avatarUrl}
                         size="md"
-                        className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-[16px]"
+                        className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-base"
                       />
                     ) : (
                       <Avatar
@@ -967,18 +966,18 @@ export default function TeamChatPage({
                         lastName=""
                         avatarUrl={c.avatarUrl ?? null}
                         size="md"
-                        className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-[16px]"
+                        className="flex-shrink-0 w-[49px] h-[49px] [&>span]:text-base"
                       />
                     )}
                     <div className="flex-1 min-w-0 flex gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[16px] font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">{label}</p>
-                        <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] truncate mt-0.5 leading-snug">
+                        <p className="text-base font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">{label}</p>
+                        <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] truncate mt-0.5 leading-snug">
                           {c.lastPreview ?? (c.type === "DM" ? "Tap to message" : "No messages yet")}
                         </p>
                       </div>
                       {timeStr && (
-                        <span className="text-[11px] text-slate-400 dark:text-[#9ca0b8] flex-shrink-0 pt-0.5 whitespace-nowrap">
+                        <span className="text-[0.6875rem] text-slate-400 dark:text-[#9ca0b8] flex-shrink-0 pt-0.5 whitespace-nowrap">
                           {timeStr}
                         </span>
                       )}
@@ -991,7 +990,7 @@ export default function TeamChatPage({
 
           {listSearch.trim() && listSearchPeople.length > 0 && (
             <div className="border-t border-slate-200/90 dark:border-[#2a2538] mt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9ca0b8] px-3 pt-3 pb-1">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9ca0b8] px-3 pt-3 pb-1">
                 People in your organization
               </p>
               <ul className="pb-2">
@@ -1015,12 +1014,12 @@ export default function TeamChatPage({
                         className="flex-shrink-0 w-[49px] h-[49px]"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[16px] font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">
+                        <p className="text-base font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">
                           {u.firstName} {u.lastName}
                         </p>
-                        <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] truncate">{u.email}</p>
+                        <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] truncate">{u.email}</p>
                       </div>
-                      <span className="text-[12px] text-primary-400 flex-shrink-0 font-medium">Message</span>
+                      <span className="text-xs text-primary-400 flex-shrink-0 font-medium">Message</span>
                     </button>
                   </li>
                 ))}
@@ -1042,8 +1041,8 @@ export default function TeamChatPage({
             <div className="w-20 h-20 rounded-full bg-primary-500/15 dark:bg-primary-500/20 flex items-center justify-center mb-4">
               <MessageCircle className="w-10 h-10 text-primary-600/80 dark:text-[#9ca0b8]" />
             </div>
-            <p className="text-[20px] font-light text-slate-900 dark:text-[#e9edef] tracking-tight">Team chat</p>
-            <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] mt-2 max-w-sm leading-relaxed">
+            <p className="text-xl font-light text-slate-900 dark:text-[#e9edef] tracking-tight">Team chat</p>
+            <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] mt-2 max-w-sm leading-relaxed">
               Select a chat, open LeaderGPT above, or start a new conversation.
             </p>
           </div>
@@ -1088,12 +1087,12 @@ export default function TeamChatPage({
                   lastName=""
                   avatarUrl={selectedChannel.avatarUrl ?? null}
                   size="md"
-                  className="flex-shrink-0 w-10 h-10 text-[15px]"
+                  className="flex-shrink-0 w-10 h-10 text-[0.9375rem]"
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-[16px] font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">{channelTitle}</p>
-                <p className="text-[12px] text-slate-500 dark:text-[#9ca0b8] truncate">{channelSubtitle}</p>
+                <p className="text-base font-medium text-slate-900 dark:text-[#e9edef] truncate leading-tight">{channelTitle}</p>
+                <p className="text-xs text-slate-500 dark:text-[#9ca0b8] truncate">{channelSubtitle}</p>
               </div>
               <div className="flex items-center gap-1 pr-1">
                 {selectedChannel.type === "GROUP" && (
@@ -1119,7 +1118,7 @@ export default function TeamChatPage({
                       }
                     }}
                     placeholder="Search in chat"
-                    className="w-36 lg:w-44 rounded-lg bg-white border border-slate-200 pl-8 pr-2 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
+                    className="w-36 lg:w-44 rounded-lg bg-white border border-slate-200 pl-8 pr-2 py-1.5 text-[0.8125rem] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
                   />
                 </div>
               </div>
@@ -1132,16 +1131,16 @@ export default function TeamChatPage({
                 value={threadSearch}
                 onChange={(e) => setThreadSearch(e.target.value)}
                 placeholder="Search messages in this chat"
-                className="flex-1 rounded-lg bg-white border border-slate-200 px-3 py-2 text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
+                className="flex-1 rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
               />
             </div>
 
             <div ref={messagesRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1 min-h-0">
               {loadingMessages && (
-                <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] text-center py-4">Loading…</p>
+                <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] text-center py-4">Loading…</p>
               )}
               {!loadingMessages && messages.length === 0 && (
-                <p className="text-[13px] text-slate-500 dark:text-[#9ca0b8] italic text-center py-8">
+                <p className="text-[0.8125rem] text-slate-500 dark:text-[#9ca0b8] italic text-center py-8">
                   {messagesQueryKey ? "No messages match your search." : "No messages yet."}
                 </p>
               )}
@@ -1173,7 +1172,7 @@ export default function TeamChatPage({
                       )}
                     >
                       {!mine && selectedChannel.type === "GROUP" && (
-                        <p className="text-[12px] font-semibold text-primary-700 dark:text-primary-400 mb-0.5">
+                        <p className="text-xs font-semibold text-primary-700 dark:text-primary-400 mb-0.5">
                           {m.author.firstName} {m.author.lastName}
                         </p>
                       )}
@@ -1206,7 +1205,7 @@ export default function TeamChatPage({
                         </div>
                       )}
                       {m.body?.trim() ? (
-                        <p className="text-[14.2px] whitespace-pre-wrap break-words leading-[1.45]">{m.body}</p>
+                        <p className="text-[0.8875rem] whitespace-pre-wrap break-words leading-[1.45]">{m.body}</p>
                       ) : null}
                     </div>
                     {showMineAvatar && (
@@ -1280,7 +1279,7 @@ export default function TeamChatPage({
                   }}
                   placeholder={stagedMedia.length ? "Caption" : "Type a message"}
                   rows={1}
-                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none max-h-32 min-w-0 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[0.9375rem] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none max-h-32 min-w-0 dark:bg-[#2a2538] dark:border-0 dark:text-[#e9edef] dark:placeholder:text-[#9ca0b8]"
                 />
                 <button
                   type="button"
@@ -1312,7 +1311,7 @@ export default function TeamChatPage({
         description="Search anyone in your organization by name, email, or username, then tap to start chatting."
         size="sm"
       >
-        <div className="space-y-3 [font-family:system-ui,sans-serif]">
+        <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
             <input
@@ -1341,7 +1340,7 @@ export default function TeamChatPage({
                   <p className="text-sm font-medium text-surface-100 truncate">
                     {u.firstName} {u.lastName}
                   </p>
-                  <p className="text-[11px] text-surface-500 truncate">{u.email}</p>
+                  <p className="text-[0.6875rem] text-surface-500 truncate">{u.email}</p>
                 </div>
               </button>
             ))}
@@ -1361,9 +1360,9 @@ export default function TeamChatPage({
         description="Add a name and choose who to include."
         size="sm"
       >
-        <div className="space-y-3 [font-family:system-ui,sans-serif]">
+        <div className="space-y-3">
           <div>
-            <label className="block text-[11px] text-surface-500 mb-1">Group name</label>
+            <label className="block text-[0.6875rem] text-surface-500 mb-1">Group name</label>
             <input
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
@@ -1403,7 +1402,7 @@ export default function TeamChatPage({
                     <p className="text-sm font-medium text-surface-100 truncate">
                       {u.firstName} {u.lastName}
                     </p>
-                    <p className="text-[11px] text-surface-500 truncate">{u.email}</p>
+                    <p className="text-[0.6875rem] text-surface-500 truncate">{u.email}</p>
                   </div>
                 </label>
               );
@@ -1430,7 +1429,7 @@ export default function TeamChatPage({
         description="People who can manage the group can set a photo, rename it, add or remove members, and assign admins."
         size="sm"
       >
-        <div className="space-y-4 [font-family:system-ui,sans-serif]">
+        <div className="space-y-4">
           {groupSettingsLoading ? (
             <p className="text-sm text-surface-500 py-6 text-center">Loading…</p>
           ) : (
@@ -1479,7 +1478,7 @@ export default function TeamChatPage({
               </div>
 
               <div>
-                <label className="block text-[11px] text-surface-500 mb-1">Group name</label>
+                <label className="block text-[0.6875rem] text-surface-500 mb-1">Group name</label>
                 <div className="flex gap-2">
                   <input
                     value={groupSettingsName}
@@ -1502,7 +1501,7 @@ export default function TeamChatPage({
 
               {groupSettingsCanManage && (
                 <div>
-                  <label className="block text-[11px] text-surface-500 mb-1">Add people</label>
+                  <label className="block text-[0.6875rem] text-surface-500 mb-1">Add people</label>
                   <div className="relative mb-2">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
                     <input
@@ -1532,7 +1531,7 @@ export default function TeamChatPage({
                           <p className="text-sm font-medium text-surface-100 truncate">
                             {u.firstName} {u.lastName}
                           </p>
-                          <p className="text-[11px] text-surface-500 truncate">{u.email}</p>
+                          <p className="text-[0.6875rem] text-surface-500 truncate">{u.email}</p>
                         </div>
                         <span className="text-xs text-primary-400 font-medium">Add</span>
                       </button>
@@ -1542,7 +1541,7 @@ export default function TeamChatPage({
               )}
 
               <div>
-                <p className="block text-[11px] text-surface-500 mb-2">
+                <p className="block text-[0.6875rem] text-surface-500 mb-2">
                   Members ({groupSettingsMembers.length})
                 </p>
                 <ul className="max-h-56 overflow-y-auto rounded-xl border border-surface-700/80 divide-y divide-surface-800">
@@ -1566,11 +1565,11 @@ export default function TeamChatPage({
                             {m.user.firstName} {m.user.lastName}
                             {isSelf ? " (you)" : ""}
                           </p>
-                          <p className="text-[11px] text-surface-500 truncate">{m.user.email}</p>
+                          <p className="text-[0.6875rem] text-surface-500 truncate">{m.user.email}</p>
                         </div>
                         <span
                           className={cn(
-                            "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md shrink-0",
+                            "text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md shrink-0",
                             m.role === "ADMIN"
                               ? "bg-primary-500/20 text-primary-300"
                               : "bg-surface-700 text-surface-400"
@@ -1585,7 +1584,7 @@ export default function TeamChatPage({
                                 type="button"
                                 disabled={groupSettingsSaving}
                                 onClick={() => void patchMemberRole(m.userId, "ADMIN")}
-                                className="text-[11px] text-primary-400 hover:text-primary-300"
+                                className="text-[0.6875rem] text-primary-400 hover:text-primary-300"
                               >
                                 Make admin
                               </button>
@@ -1595,7 +1594,7 @@ export default function TeamChatPage({
                                   type="button"
                                   disabled={groupSettingsSaving}
                                   onClick={() => void patchMemberRole(m.userId, "MEMBER")}
-                                  className="text-[11px] text-surface-400 hover:text-surface-200"
+                                  className="text-[0.6875rem] text-surface-400 hover:text-surface-200"
                                 >
                                   Remove admin
                                 </button>
@@ -1605,7 +1604,7 @@ export default function TeamChatPage({
                               type="button"
                               disabled={groupSettingsSaving}
                               onClick={() => void removeOrLeaveMember(m.userId)}
-                              className="text-[11px] text-red-400 hover:text-red-300"
+                              className="text-[0.6875rem] text-red-400 hover:text-red-300"
                             >
                               Remove
                             </button>
