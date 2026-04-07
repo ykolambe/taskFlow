@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Toaster } from "react-hot-toast";
 import { Manrope, Playfair_Display } from "next/font/google";
 import PwaServiceWorker from "@/components/PwaServiceWorker";
@@ -17,7 +17,12 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+const metadataBase =
+  appUrl && /^https?:\/\//i.test(appUrl) ? new URL(appUrl) : new URL("http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase,
   title: "TaskFlow — Multi-Tenant Task Manager",
   description: "A powerful multi-tenant task management platform",
   appleWebApp: {
@@ -35,10 +40,12 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport = {
+/** Allow pinch-zoom so PWA/browser users match system font-size / accessibility settings. */
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
+  userScalable: true,
   themeColor: "#101522",
 };
 

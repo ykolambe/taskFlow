@@ -77,6 +77,12 @@ After seeding, you'll have:
 
 ---
 
+## Mobile apps (Android / iOS)
+
+TaskFlow is a **PWA** (install from the browser) with an optional **Capacitor** wrapper for App Store / Play Store. See **[docs/MOBILE.md](docs/MOBILE.md)** for the distribution decision, PWA checklist, Capacitor commands, and auth/WebView testing notes.
+
+---
+
 ## 📱 URL Structure
 
 ### Local Development
@@ -152,6 +158,10 @@ prisma/
 | `npm run db:seed` | Seed database with demo data |
 | `npm run db:studio` | Open Prisma Studio (DB browser) |
 | `npm run db:reset` | Reset DB and re-seed |
+| `npm run pwa:icons` | Regenerate PWA PNG icons from `public/icon.svg` |
+| `npm run cap:sync` | Sync Capacitor web assets + config to `android/` / `ios/` |
+| `npm run cap:open:android` | Open Android Studio |
+| `npm run cap:open:ios` | Open Xcode (macOS) |
 
 ---
 
@@ -194,6 +204,29 @@ TODO → IN_PROGRESS → READY_FOR_REVIEW → COMPLETED
 3. Set `JWT_SECRET` to a strong random string
 4. Set `NODE_ENV=production`
 5. Run `npm run build && npm start`
+6. Apply the DB schema (`npm run db:push` or `prisma migrate deploy`) and **seed or create the platform owner** (see below).
+
+### Platform admin login (`/platform/login`) — “Invalid credentials”
+
+That screen is **not** the same as tenant login (`/t/slug/login`). Platform admins are stored in the **`platform_owners`** table (see `prisma/seed.ts`), not in `users`.
+
+**Common causes after deploy**
+
+| Issue | What to do |
+|--------|------------|
+| Database was never seeded | On the server, with `DATABASE_URL` set: `npm run db:seed` (creates `PlatformOwner` + demo data) **or** only `npm run db:platform-owner` to upsert the platform admin only. |
+| Wrong credentials | Defaults after seed (if you did not override env): **Email** `admin@platform.com`, **Password** `Platform@123`. Set `PLATFORM_EMAIL` / `PLATFORM_PASSWORD` in `.env` before seeding, or run `npm run db:platform-owner` to **reset** the password to match your current `.env`. |
+| Wrong DB / empty DB | Confirm `DATABASE_URL` on the droplet points to the same Postgres instance you migrated. |
+| Logging in as tenant | Use **`https://your-host/platform/login`** for platform admin. Tenant users use **`/t/{slug}/login`**. |
+
+**Reset or create platform admin only (no full seed)**
+
+```bash
+# From project root, load .env then:
+npm run db:platform-owner
+```
+
+This upserts `PlatformOwner` using `PLATFORM_EMAIL`, `PLATFORM_PASSWORD`, and `PLATFORM_NAME` from the environment (defaults are the same as in **Default Credentials** above).
 # taskFlow
 
 ---

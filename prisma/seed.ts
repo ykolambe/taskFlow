@@ -7,7 +7,7 @@ async function main() {
   console.log("🌱 Seeding database...");
 
   // ─── Platform Owner ───────────────────────────────────────────────
-  const platformEmail = process.env.PLATFORM_EMAIL || "admin@platform.com";
+  const platformEmail = (process.env.PLATFORM_EMAIL || "admin@platform.com").trim().toLowerCase();
   const platformPassword = process.env.PLATFORM_PASSWORD || "Platform@123";
   const platformName = process.env.PLATFORM_NAME || "Platform Admin";
 

@@ -10,9 +10,13 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:platform-owner": "tsx scripts/ensure-platform-owner.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "pwa:icons": "node scripts/generate-pwa-icons.cjs"
+    "pwa:icons": "node scripts/generate-pwa-icons.cjs",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1017.0",
@@ -41,6 +45,10 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
@@ -49,6 +57,7 @@
     "@types/uuid": "^9.0.8",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.0.1",
+    "dotenv": "^17.4.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
     "postcss": "^8",
