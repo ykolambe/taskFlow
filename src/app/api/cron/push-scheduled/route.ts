@@ -29,7 +29,7 @@ function run(req: NextRequest) {
     .then((r) => NextResponse.json({ success: true, data: r }))
     .catch((e) =>
       NextResponse.json(
-        { error: e instanceof Error ? e.message : "Dispatch failed" },
+        { error: "Dispatch failed" },
         { status: 500 }
       )
     );

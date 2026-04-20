@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Release / App Store: default ATS (HTTPS only for remote loads). Debug builds use Info-Debug.plist instead. -->
+<!-- Debug builds only: allows http:// in Capacitor WKWebView (LAN, localhost). Release uses Info.plist without this. -->
 <plist version="1.0">
 <dict>
     <key>CAPACITOR_DEBUG</key>
@@ -48,5 +48,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

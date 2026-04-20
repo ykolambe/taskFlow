@@ -3,11 +3,7 @@ import type { NextRequest } from "next/server";
 import { jwtVerify, SignJWT, type JWTPayload } from "jose";
 import { authSessionCookieOptions } from "@/lib/authCookies";
 import { getJwtExpirationDurationString, getSessionMaxAgeSeconds } from "@/lib/sessionDuration";
-
-const getSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || "fallback-dev-secret-please-change"
-  );
+import { getJwtSecretKey } from "@/lib/jwtSecret";
 
 /** Tolerate phone/desktop clock skew so valid sessions are not dropped on every cold start. */
 const JWT_CLOCK_TOLERANCE_SEC = 120;
@@ -37,7 +33,7 @@ function getSubdomain(hostname: string, rootDomain: string): string | null {
 }
 
 async function verifyJwt(token: string) {
-  const { payload } = await jwtVerify(token, getSecret(), {
+  const { payload } = await jwtVerify(token, getJwtSecretKey(), {
     clockTolerance: JWT_CLOCK_TOLERANCE_SEC,
   });
   return payload;
@@ -64,7 +60,7 @@ async function maybeRefreshTenantSessionToken(payload: JWTPayload): Promise<stri
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(getJwtExpirationDurationString())
-    .sign(getSecret());
+    .sign(getJwtSecretKey());
 }
 
 export async function middleware(request: NextRequest) {

@@ -20,6 +20,21 @@ const config: CapacitorConfig = {
     url: serverUrl,
     cleartext: isCleartext,
   },
+  plugins: {
+    StatusBar: {
+      overlaysWebView: false,
+      style: "LIGHT",
+    },
+    SplashScreen: {
+      /** Keep visible until the WebView finishes the first load; hide from `CapacitorSplashScreen`. */
+      launchAutoHide: false,
+      launchFadeOutDuration: 320,
+      backgroundColor: "#090d17",
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
+      showSpinner: false,
+    },
+  },
 };
 
 export default config;

@@ -35,7 +35,7 @@ export default async function ChatPage({
       slug={slug}
       modules={company.modules}
     >
-      <div className="h-[calc(100dvh-7.25rem)] lg:h-[calc(100dvh-1.5rem)] overflow-hidden flex flex-col min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center bg-surface-950 text-slate-500 dark:bg-[#13101c] dark:text-[#9ca0b8] text-sm">

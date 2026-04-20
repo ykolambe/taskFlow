@@ -77,8 +77,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ sl
     }
   });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Save failed";
-    return NextResponse.json({ error: msg }, { status: 400 });
+    console.error("[org] save failed", e);
+    return NextResponse.json(
+      { error: "Could not save organization settings. Check your input and try again." },
+      { status: 400 }
+    );
   }
 
   const [updated, tiers] = await Promise.all([

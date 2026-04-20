@@ -221,3 +221,10 @@ input:-webkit-autofill:focus {
 .org-tree.company-root > ul.org-tree-siblings {
   padding-top: 0;
 }
+
+/* Full-height pages sit inside layout safe-area wrapper; 100vh would ignore notch and cause scroll */
+@layer utilities {
+  .min-h-screen {
+    min-height: 100%;
+  }
+}

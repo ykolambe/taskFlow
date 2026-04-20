@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "react-hot-toast";
 import { Manrope, Playfair_Display } from "next/font/google";
+import CapacitorSplashScreen from "@/components/capacitor/CapacitorSplashScreen";
 import PwaServiceWorker from "@/components/PwaServiceWorker";
 import PwaInstallButton from "@/components/PwaInstallButton";
 import "./globals.css";
@@ -28,7 +29,8 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "TaskFlow",
-    statusBarStyle: "black-translucent",
+    /** Opaque bar avoids web content visually bleeding under the clock / Dynamic Island in standalone & Capacitor */
+    statusBarStyle: "black",
   },
   icons: {
     icon: [
@@ -47,6 +49,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: "#101522",
+  /** Required for env(safe-area-inset-*) on iOS notch / Capacitor WebView */
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -56,12 +60,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${manrope.variable} ${playfair.variable}`}>
-        {children}
+      <body className={`${manrope.variable} ${playfair.variable} flex min-h-dvh flex-col`}>
+        <div className="relative flex min-h-0 flex-1 flex-col box-border w-full pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]">
+          {children}
+        </div>
+        <CapacitorSplashScreen />
         <PwaServiceWorker />
         <PwaInstallButton />
         <Toaster
           position="top-right"
+          containerStyle={{
+            top: "max(1rem, env(safe-area-inset-top, 0px))",
+          }}
           toastOptions={{
             style: {
               background: "rgba(16, 21, 34, 0.92)",

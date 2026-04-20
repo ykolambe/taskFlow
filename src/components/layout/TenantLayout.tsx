@@ -341,7 +341,7 @@ export default function TenantLayout({
   );
 
   return (
-    <div className="flex h-screen bg-surface-950 overflow-hidden">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-surface-950">
       {/* Desktop Sidebar */}
       <aside
         className={cn(

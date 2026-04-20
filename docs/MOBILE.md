@@ -51,6 +51,15 @@ After changing plugins or `capacitor.config.ts`, run `npm run cap:sync` again.
 
 `npx cap add ios` must be run on **macOS** with Xcode. CI/Linux can build Android only.
 
+### iOS Debug vs Release (HTTP vs HTTPS)
+
+- **Debug** builds use `ios/App/App/Info-Debug.plist`, which relaxes ATS for the Capacitor **WKWebView** so `http://` works (e.g. `http://192.168.x.x:3000` on your LAN). Run from Xcode with the **Debug** configuration (default when you press Run).
+- **Release** builds use `ios/App/App/Info.plist` with **default ATS** — use **`https://`** for `CAPACITOR_SERVER_URL` in production (archive / TestFlight / App Store).
+
+`capacitor.config.ts` already sets `server.cleartext` when the URL starts with `http://` (Android). For production, set `CAPACITOR_SERVER_URL` (or `NEXT_PUBLIC_APP_URL`) to your **`https://`** origin and run `npm run cap:sync`.
+
+If you add new keys to `Info.plist`, mirror them in `Info-Debug.plist` unless they are Debug-only.
+
 ---
 
 ## Auth and WebView / standalone testing

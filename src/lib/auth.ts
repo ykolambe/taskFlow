@@ -3,11 +3,7 @@ import { cookies } from "next/headers";
 import type { UiFontScale, UiTheme } from "@prisma/client";
 import { hydrateTenantPrisma, prisma, setTenantDbContext } from "@/lib/prisma";
 import { getJwtExpirationDurationString } from "@/lib/sessionDuration";
-
-const getSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || "fallback-dev-secret-please-change"
-  );
+import { getJwtSecretKey } from "@/lib/jwtSecret";
 
 // ─── Token Types ──────────────────────────────────────────────────────────
 
@@ -45,11 +41,11 @@ export async function signToken(payload: TokenPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(getJwtExpirationDurationString())
-    .sign(getSecret());
+    .sign(getJwtSecretKey());
 }
 
 export async function verifyToken(token: string): Promise<TokenPayload> {
-  const { payload } = await jwtVerify(token, getSecret(), { clockTolerance: 120 });
+  const { payload } = await jwtVerify(token, getJwtSecretKey(), { clockTolerance: 120 });
   return payload as unknown as TokenPayload;
 }
 

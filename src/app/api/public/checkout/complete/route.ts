@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     console.error("checkout/complete: provisioning failed", e);
-    const message = e instanceof Error ? e.message : "Provisioning failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("checkout/complete: provisioning failed", e);
+    return NextResponse.json({ error: "Provisioning failed" }, { status: 500 });
   }
 
   return NextResponse.json({ error: "Unexpected state" }, { status: 500 });

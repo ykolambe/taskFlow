@@ -107,7 +107,7 @@ export default function PlatformLayout({ children, user }: PlatformLayoutProps) 
   );
 
   return (
-    <div className="flex h-screen bg-surface-950 overflow-hidden">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-surface-950">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-60 flex-col bg-surface-900/95 border-r border-surface-800/70 flex-shrink-0 backdrop-blur-xl">
         <SidebarContent />
