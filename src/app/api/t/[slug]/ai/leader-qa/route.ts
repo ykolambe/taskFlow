@@ -8,6 +8,10 @@ import { getSubtreeIds, getDirectReportIds } from "@/lib/subtreeWorkload";
 import { isUserAiEnabled } from "@/lib/ai/entitlement";
 import { fetchLeaderQaOrgContext, filterOpenTasksForLeaderQa } from "@/lib/ai/leaderQaOrgContext";
 import { buildLeaderQaPrompt, leaderQaResponseSchema } from "@/lib/ai/leaderQaPrompt";
+import {
+  classifyLeaderGptQuestionScope,
+  LEADER_GPT_OFF_TOPIC_MESSAGE,
+} from "@/lib/ai/leaderQaScopeGuard";
 import { generateGeminiJson } from "@/lib/ai/gemini";
 import type { LeaderQaAnswer, LeaderQaMetric, LeaderQaResponse } from "@/lib/ai/types";
 
@@ -626,6 +630,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   let result: LeaderQaAnswer;
   let source: "ai" | "fallback" = "ai";
   try {
+    try {
+      const scope = await classifyLeaderGptQuestionScope(question, company.id);
+      if (scope === "OUT_OF_SCOPE") {
+        return NextResponse.json({
+          success: true,
+          data: { mode: "clarification", message: LEADER_GPT_OFF_TOPIC_MESSAGE },
+        });
+      }
+    } catch (scopeErr) {
+      console.error("LeaderGPT scope check failed (continuing to QA):", scopeErr);
+    }
+
     const prompt = buildLeaderQaPrompt({
       question,
       teamLabel: "Visible org scope (primary reporting tree)",

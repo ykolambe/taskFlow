@@ -61,6 +61,8 @@ interface Company {
     aiApiKeySecretRef: string | null;
     aiBaseUrl: string | null;
     aiRequestBudgetDaily: number | null;
+    hasGeminiApiKeyPlatform: boolean;
+    hasGeminiApiKeyTenant: boolean;
   } | null;
   _count: { users: number; tasks: number; ideas?: number; recurringTasks?: number };
   roleLevels: { id: string; name: string; level: number; color: string; canApprove: boolean }[];
@@ -176,6 +178,8 @@ export default function CompanyDetail({ company }: { company: Company }) {
         ? String(company.infraConfig.aiRequestBudgetDaily)
         : "",
   });
+  const [platformGeminiKeyDraft, setPlatformGeminiKeyDraft] = useState("");
+  const [clearPlatformGeminiKey, setClearPlatformGeminiKey] = useState(false);
   const [provisioningJobs, setProvisioningJobs] = useState<ProvisioningJob[]>([]);
   const [loadingProvisioningJobs, setLoadingProvisioningJobs] = useState(false);
 
@@ -285,30 +289,38 @@ export default function CompanyDetail({ company }: { company: Company }) {
   const handleSaveInfra = async () => {
     setSavingInfra(true);
     try {
+      const payload: Record<string, unknown> = {
+        deploymentMode: infraForm.deploymentMode,
+        backendBaseUrl: infraForm.backendBaseUrl || null,
+        backendIp: infraForm.backendIp || null,
+        frontendBaseUrl: infraForm.frontendBaseUrl || null,
+        frontendIp: infraForm.frontendIp || null,
+        dbHost: infraForm.dbHost || null,
+        dbPort: infraForm.dbPort ? Number(infraForm.dbPort) : null,
+        dbName: infraForm.dbName || null,
+        dbUserSecretRef: infraForm.dbUserSecretRef || null,
+        dbPasswordSecretRef: infraForm.dbPasswordSecretRef || null,
+        dbUrlSecretRef: infraForm.dbUrlSecretRef || null,
+        aiProvider: infraForm.aiProvider || null,
+        aiModel: infraForm.aiModel || null,
+        aiApiKeySecretRef: infraForm.aiApiKeySecretRef || null,
+        aiBaseUrl: infraForm.aiBaseUrl || null,
+        aiRequestBudgetDaily: infraForm.aiRequestBudgetDaily ? Number(infraForm.aiRequestBudgetDaily) : null,
+      };
+      if (clearPlatformGeminiKey) {
+        payload.geminiApiKeyPlatform = null;
+      } else if (platformGeminiKeyDraft.trim()) {
+        payload.geminiApiKeyPlatform = platformGeminiKeyDraft.trim();
+      }
       const res = await fetch(`/api/platform/companies/${company.id}/infra`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deploymentMode: infraForm.deploymentMode,
-          backendBaseUrl: infraForm.backendBaseUrl || null,
-          backendIp: infraForm.backendIp || null,
-          frontendBaseUrl: infraForm.frontendBaseUrl || null,
-          frontendIp: infraForm.frontendIp || null,
-          dbHost: infraForm.dbHost || null,
-          dbPort: infraForm.dbPort ? Number(infraForm.dbPort) : null,
-          dbName: infraForm.dbName || null,
-          dbUserSecretRef: infraForm.dbUserSecretRef || null,
-          dbPasswordSecretRef: infraForm.dbPasswordSecretRef || null,
-          dbUrlSecretRef: infraForm.dbUrlSecretRef || null,
-          aiProvider: infraForm.aiProvider || null,
-          aiModel: infraForm.aiModel || null,
-          aiApiKeySecretRef: infraForm.aiApiKeySecretRef || null,
-          aiBaseUrl: infraForm.aiBaseUrl || null,
-          aiRequestBudgetDaily: infraForm.aiRequestBudgetDaily ? Number(infraForm.aiRequestBudgetDaily) : null,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         toast.success("Infrastructure config saved");
+        setPlatformGeminiKeyDraft("");
+        setClearPlatformGeminiKey(false);
         router.refresh();
       } else {
         const data = await res.json().catch(() => null);
@@ -657,6 +669,46 @@ export default function CompanyDetail({ company }: { company: Company }) {
                 <Input label="AI Provider" value={infraForm.aiProvider} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiProvider: e.target.value }))} />
                 <Input label="AI Model" value={infraForm.aiModel} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiModel: e.target.value }))} />
                 <Input label="AI Key Secret Ref" value={infraForm.aiApiKeySecretRef} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiApiKeySecretRef: e.target.value }))} />
+                <div className="sm:col-span-2 space-y-2">
+                  <Input
+                    label="Gemini API key (platform, optional)"
+                    type="password"
+                    autoComplete="new-password"
+                    value={platformGeminiKeyDraft}
+                    onChange={(e) => {
+                      setPlatformGeminiKeyDraft(e.target.value);
+                      setClearPlatformGeminiKey(false);
+                    }}
+                    placeholder={
+                      company.infraConfig?.hasGeminiApiKeyPlatform
+                        ? "Leave blank to keep existing key; enter to replace"
+                        : "Leave blank to use secret ref or server GEMINI_API_KEY"
+                    }
+                  />
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-surface-500">
+                    {company.infraConfig?.hasGeminiApiKeyPlatform ? (
+                      <span className="text-emerald-400/90">A platform Gemini key is stored.</span>
+                    ) : (
+                      <span>No platform Gemini key stored.</span>
+                    )}
+                    {company.infraConfig?.hasGeminiApiKeyTenant ? (
+                      <span className="text-surface-400">Tenant super admin has set their own key (takes priority).</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="text-amber-400/90 hover:text-amber-300"
+                      onClick={() => {
+                        setPlatformGeminiKeyDraft("");
+                        setClearPlatformGeminiKey(true);
+                      }}
+                    >
+                      Clear platform key on save
+                    </button>
+                  </div>
+                  {clearPlatformGeminiKey ? (
+                    <p className="text-xs text-amber-400/90">Stored platform Gemini key will be removed when you save infra.</p>
+                  ) : null}
+                </div>
                 <Input label="AI Base URL" value={infraForm.aiBaseUrl} onChange={(e) => setInfraForm((prev) => ({ ...prev, aiBaseUrl: e.target.value }))} />
                 <Input
                   label="AI Daily Request Budget"

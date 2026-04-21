@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { resolveSecretRef } from "@/lib/secrets";
+import { resolveGeminiApiKeyForInfra } from "@/lib/ai/resolveGeminiApiKey";
 
 const geminiResponseSchema = z.object({
   candidates: z
@@ -44,6 +44,8 @@ export async function generateGeminiJson<T>(options: GeminiGenerateOptions): Pro
         aiProvider: true,
         aiModel: true,
         aiApiKeySecretRef: true,
+        geminiApiKeyPlatform: true,
+        geminiApiKeyTenant: true,
         aiRequestBudgetDaily: true,
         aiRequestCountDaily: true,
         aiBudgetResetAt: true,
@@ -52,8 +54,8 @@ export async function generateGeminiJson<T>(options: GeminiGenerateOptions): Pro
     if (infra) {
       provider = infra.aiProvider ?? provider;
       model = options.model ?? infra.aiModel ?? model;
-      const keyFromRef = resolveSecretRef(infra.aiApiKeySecretRef);
-      apiKey = keyFromRef ?? apiKey;
+      const resolved = resolveGeminiApiKeyForInfra(infra);
+      if (resolved) apiKey = resolved;
 
       const now = new Date();
       const needsReset = !infra.aiBudgetResetAt || infra.aiBudgetResetAt <= now;

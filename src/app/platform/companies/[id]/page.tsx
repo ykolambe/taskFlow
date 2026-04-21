@@ -80,6 +80,8 @@ export default async function CompanyDetailPage({
           aiApiKeySecretRef: company.infraConfig.aiApiKeySecretRef,
           aiBaseUrl: company.infraConfig.aiBaseUrl,
           aiRequestBudgetDaily: company.infraConfig.aiRequestBudgetDaily,
+          hasGeminiApiKeyPlatform: Boolean(company.infraConfig.geminiApiKeyPlatform?.trim()),
+          hasGeminiApiKeyTenant: Boolean(company.infraConfig.geminiApiKeyTenant?.trim()),
         }
       : null,
     _count: company._count,

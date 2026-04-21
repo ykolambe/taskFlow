@@ -783,6 +783,10 @@ model TenantInfraConfig {
   aiProvider           String?   // gemini | openai | custom
   aiModel              String?
   aiApiKeySecretRef    String?
+  /// Direct Gemini key set by platform (optional; see resolveGeminiApiKeyForInfra).
+  geminiApiKeyPlatform String? @db.Text
+  /// Direct Gemini key set by tenant super admin (optional; overrides platform key when present).
+  geminiApiKeyTenant String? @db.Text
   aiBaseUrl            String?
   aiRequestBudgetDaily Int?
   aiRequestCountDaily  Int       @default(0)

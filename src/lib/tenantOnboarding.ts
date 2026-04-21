@@ -3,7 +3,7 @@ import type { Company } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generatePassword } from "@/lib/utils";
 import bcrypt from "bcryptjs";
-import { ProvisioningAction, ProvisioningStatus } from "@prisma/client";
+import { DeploymentMode, ProvisioningAction, ProvisioningStatus } from "@prisma/client";
 import { enqueueProvisioningJob, processPendingProvisioningJobs } from "@/lib/tenantProvisioning";
 import { resolveTenantPublicBaseUrl } from "@/lib/requestOrigin";
 
@@ -49,7 +49,59 @@ export type CreateTenantWorkspaceParams = {
   req?: NextRequest | null;
   /** Passed to `enqueueProvisioningJob` metadata (e.g. `company_create_auto` for platform). */
   provisioningJobSource?: string;
+  /** Optional Gemini API key stored for this tenant (platform). When set, default tenant secret ref is omitted. */
+  geminiApiKeyPlatform?: string | null;
+  /** Defaults to SHARED. DEDICATED requires `dedicatedDatabase` connection details. */
+  deploymentMode?: string;
+  /**
+   * Required when deploymentMode is DEDICATED: either a full `postgresql://` URL in `dbUrl`,
+   * or `dbHost` + `dbName` + `dbUserSecretRef` + `dbPasswordSecretRef` (env ref names or literal values per resolveSecretRef).
+   */
+  dedicatedDatabase?: DedicatedDatabaseInput | null;
 };
+
+export type DedicatedDatabaseInput = {
+  /** Full Postgres URL; stored in `dbUrlSecretRef`. When set, host/name/user fields are omitted. */
+  dbUrl?: string | null;
+  dbHost?: string | null;
+  dbPort?: number | null;
+  dbName?: string | null;
+  dbUserSecretRef?: string | null;
+  dbPasswordSecretRef?: string | null;
+  /** Optional env ref to a full URL instead of inline `dbUrl`. */
+  dbUrlSecretRef?: string | null;
+};
+
+export class CreateTenantValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CreateTenantValidationError";
+  }
+}
+
+function isPostgresUrl(s: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(s.trim());
+}
+
+/** Returns error message or null if valid. */
+export function validateDedicatedDatabaseInput(input: DedicatedDatabaseInput | null | undefined): string | null {
+  if (!input) return "Dedicated deployment requires database connection details.";
+  const inlineUrl = input.dbUrl?.trim();
+  const urlRef = input.dbUrlSecretRef?.trim();
+  if (inlineUrl && !isPostgresUrl(inlineUrl)) {
+    return "Dedicated: Database URL must start with postgresql:// or postgres://.";
+  }
+  if (urlRef && isPostgresUrl(urlRef)) return null;
+  if (inlineUrl && isPostgresUrl(inlineUrl)) return null;
+  const host = input.dbHost?.trim();
+  const name = input.dbName?.trim();
+  const userRef = input.dbUserSecretRef?.trim();
+  const passRef = input.dbPasswordSecretRef?.trim();
+  if (!host || !name || !userRef || !passRef) {
+    return "Dedicated: Provide a full PostgreSQL URL (inline or in URL secret ref), or DB host, database name, DB user secret ref, and DB password secret ref.";
+  }
+  return null;
+}
 
 export type CreateTenantWorkspaceResult = {
   company: Company;
@@ -95,7 +147,20 @@ function resolveUrls(req: NextRequest | null | undefined, runtimeBaseUrl: string
 export async function createTenantWorkspace(
   params: CreateTenantWorkspaceParams
 ): Promise<CreateTenantWorkspaceResult> {
-  const { name, slug, modules, roleLevels, admin, billing, runtimeBaseUrl, req, provisioningJobSource } = params;
+  const {
+    name,
+    slug,
+    modules,
+    roleLevels,
+    admin,
+    billing,
+    runtimeBaseUrl,
+    req,
+    provisioningJobSource,
+    geminiApiKeyPlatform,
+    deploymentMode: deploymentModeParam,
+    dedicatedDatabase,
+  } = params;
 
   const normalizedSlug = String(slug).toLowerCase().trim();
   const tenantKey = normalizedSlug.replace(/[^a-z0-9]/g, "_").toUpperCase();
@@ -109,6 +174,16 @@ export async function createTenantWorkspace(
   const dbPasswordRef = `TENANT_${tenantKey}_DB_PASSWORD`;
   const dbUrlRef = `TENANT_${tenantKey}_DATABASE_URL`;
   const aiKeyRef = `TENANT_${tenantKey}_GEMINI_API_KEY`;
+  const platformGeminiKey = geminiApiKeyPlatform?.trim() || null;
+
+  const dmRaw = String(deploymentModeParam ?? "SHARED").toUpperCase();
+  const deploymentMode: DeploymentMode =
+    dmRaw === "DEDICATED" ? DeploymentMode.DEDICATED : DeploymentMode.SHARED;
+
+  if (deploymentMode === DeploymentMode.DEDICATED) {
+    const v = validateDedicatedDatabaseInput(dedicatedDatabase ?? null);
+    if (v) throw new CreateTenantValidationError(v);
+  }
 
   let bootstrapEmail: string;
   let bootstrapUsername: string;
@@ -144,6 +219,40 @@ export async function createTenantWorkspace(
   }
 
   const boot = billing || {};
+
+  const d = dedicatedDatabase;
+  const urlFromForm = d?.dbUrl?.trim();
+  const urlRefFromForm = d?.dbUrlSecretRef?.trim();
+  let finalDbHost: string | null = defaultDbHost;
+  let finalDbPort: number = defaultDbPort;
+  let finalDbName: string | null = defaultDbName;
+  let finalDbUserRef: string | null = dbUserRef;
+  let finalDbPasswordRef: string | null = dbPasswordRef;
+  let finalDbUrlRef: string | null = dbUrlRef;
+
+  if (deploymentMode === DeploymentMode.DEDICATED && d) {
+    const connectUrl =
+      urlFromForm && isPostgresUrl(urlFromForm)
+        ? urlFromForm
+        : urlRefFromForm && isPostgresUrl(urlRefFromForm)
+          ? urlRefFromForm
+          : null;
+    if (connectUrl) {
+      finalDbUrlRef = connectUrl;
+      finalDbHost = null;
+      finalDbPort = defaultDbPort;
+      finalDbName = null;
+      finalDbUserRef = null;
+      finalDbPasswordRef = null;
+    } else {
+      finalDbHost = d.dbHost?.trim() || null;
+      finalDbPort = d.dbPort != null && !Number.isNaN(Number(d.dbPort)) ? Number(d.dbPort) : defaultDbPort;
+      finalDbName = d.dbName?.trim() || null;
+      finalDbUserRef = d.dbUserSecretRef?.trim() || null;
+      finalDbPasswordRef = d.dbPasswordSecretRef?.trim() || null;
+      finalDbUrlRef = urlRefFromForm && !isPostgresUrl(urlRefFromForm) ? urlRefFromForm : null;
+    }
+  }
 
   const txResult = await prisma.$transaction(async (tx) => {
     const created = await tx.company.create({
@@ -197,19 +306,20 @@ export async function createTenantWorkspace(
       update: {},
       create: {
         companyId: created.id,
-        deploymentMode: "SHARED",
+        deploymentMode,
         provisioningStatus: ProvisioningStatus.PENDING,
         backendBaseUrl: defaultBackendUrl,
         frontendBaseUrl: defaultFrontendUrl,
-        dbHost: defaultDbHost,
-        dbPort: defaultDbPort,
-        dbName: defaultDbName,
-        dbUserSecretRef: dbUserRef,
-        dbPasswordSecretRef: dbPasswordRef,
-        dbUrlSecretRef: dbUrlRef,
+        dbHost: finalDbHost,
+        dbPort: finalDbPort,
+        dbName: finalDbName,
+        dbUserSecretRef: finalDbUserRef,
+        dbPasswordSecretRef: finalDbPasswordRef,
+        dbUrlSecretRef: finalDbUrlRef,
         aiProvider: defaultAiProvider,
         aiModel: defaultAiModel,
-        aiApiKeySecretRef: aiKeyRef,
+        aiApiKeySecretRef: platformGeminiKey ? null : aiKeyRef,
+        geminiApiKeyPlatform: platformGeminiKey,
       },
     });
 
@@ -240,7 +350,10 @@ export async function createTenantWorkspace(
   await enqueueProvisioningJob(
     txResult.id,
     ProvisioningAction.PROVISION,
-    { source: provisioningJobSource ?? "tenant_onboarding", forceDbBootstrap: true },
+    {
+      source: provisioningJobSource ?? "tenant_onboarding",
+      forceDbBootstrap: deploymentMode === DeploymentMode.DEDICATED,
+    },
     idempotencyKey
   );
 
@@ -268,10 +381,11 @@ export async function createTenantWorkspace(
       slug: normalizedSlug,
     },
     secretRefs: {
-      dbUserSecretRef: dbUserRef,
-      dbPasswordSecretRef: dbPasswordRef,
-      dbUrlSecretRef: dbUrlRef,
-      aiApiKeySecretRef: aiKeyRef,
+      dbUserSecretRef: finalDbUserRef ?? dbUserRef,
+      dbPasswordSecretRef: finalDbPasswordRef ?? dbPasswordRef,
+      dbUrlSecretRef:
+        finalDbUrlRef && isPostgresUrl(finalDbUrlRef) ? "(direct URL stored — not echoed)" : (finalDbUrlRef ?? dbUrlRef),
+      aiApiKeySecretRef: platformGeminiKey ? "(using platform Gemini key field)" : aiKeyRef,
     },
     provisioning: { autoQueued: true, autoProcessed, warning: provisioningWarning },
   };

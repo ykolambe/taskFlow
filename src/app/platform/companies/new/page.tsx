@@ -24,6 +24,10 @@ const DEFAULT_LEVELS: RoleLevelInput[] = [
   { name: "Team Member", level: 4, color: "#10b981" },
 ];
 
+function ReqBadge() {
+  return <span className="text-red-400/90 text-[0.65rem] font-semibold uppercase tracking-wide ml-1.5">Required</span>;
+}
+
 export default function NewCompanyPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -32,6 +36,15 @@ export default function NewCompanyPage() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [roleLevels, setRoleLevels] = useState<RoleLevelInput[]>(DEFAULT_LEVELS);
   const [modules, setModules] = useState(["tasks", "team", "org", "approvals"]);
+  const [deploymentMode, setDeploymentMode] = useState<"SHARED" | "DEDICATED">("SHARED");
+  const [dedicatedDbUrl, setDedicatedDbUrl] = useState("");
+  const [dedicatedDbHost, setDedicatedDbHost] = useState("");
+  const [dedicatedDbPort, setDedicatedDbPort] = useState("");
+  const [dedicatedDbName, setDedicatedDbName] = useState("");
+  const [dedicatedDbUserRef, setDedicatedDbUserRef] = useState("");
+  const [dedicatedDbPasswordRef, setDedicatedDbPasswordRef] = useState("");
+  const [dedicatedDbUrlSecretRef, setDedicatedDbUrlSecretRef] = useState("");
+  const [geminiApiKeyPlatform, setGeminiApiKeyPlatform] = useState("");
   const [credentials, setCredentials] = useState<{ email: string; password: string; slug: string } | null>(null);
 
   const handleNameChange = (value: string) => {
@@ -73,12 +86,50 @@ export default function NewCompanyPage() {
     e.preventDefault();
     if (!name || !slug) { toast.error("Name and slug are required"); return; }
     if (roleLevels.length < 1) { toast.error("Add at least one role level"); return; }
+
+    if (deploymentMode === "DEDICATED") {
+      const u = dedicatedDbUrl.trim();
+      const urlRef = dedicatedDbUrlSecretRef.trim();
+      const postgres = (s: string) => /^postgres(ql)?:\/\//i.test(s);
+      const hasUrl = (u && postgres(u)) || (urlRef && postgres(urlRef));
+      const hasParts =
+        dedicatedDbHost.trim() &&
+        dedicatedDbName.trim() &&
+        dedicatedDbUserRef.trim() &&
+        dedicatedDbPasswordRef.trim();
+      if (!hasUrl && !hasParts) {
+        toast.error("Dedicated: enter a full PostgreSQL URL, or host + database + user ref + password ref.");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
+      const dedicatedDatabase =
+        deploymentMode === "DEDICATED"
+          ? {
+              dbUrl: dedicatedDbUrl.trim() || undefined,
+              dbHost: dedicatedDbHost.trim() || undefined,
+              dbPort: dedicatedDbPort.trim() ? dedicatedDbPort.trim() : undefined,
+              dbName: dedicatedDbName.trim() || undefined,
+              dbUserSecretRef: dedicatedDbUserRef.trim() || undefined,
+              dbPasswordSecretRef: dedicatedDbPasswordRef.trim() || undefined,
+              dbUrlSecretRef: dedicatedDbUrlSecretRef.trim() || undefined,
+            }
+          : undefined;
+
       const res = await fetch("/api/platform/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, slug, roleLevels, modules }),
+        body: JSON.stringify({
+          name,
+          slug,
+          roleLevels,
+          modules,
+          deploymentMode,
+          ...(dedicatedDatabase ? { dedicatedDatabase } : {}),
+          ...(geminiApiKeyPlatform.trim() ? { geminiApiKeyPlatform: geminiApiKeyPlatform.trim() } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Failed to create"); return; }
@@ -194,6 +245,138 @@ export default function NewCompanyPage() {
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* Deployment */}
+            <div className="space-y-4 rounded-xl border border-surface-700 bg-surface-750/40 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-surface-200 uppercase tracking-wider inline">
+                  Deployment
+                </h3>
+                <ReqBadge />
+              </div>
+              <p className="text-xs text-surface-500 leading-relaxed">
+                <strong className="text-surface-300">Shared</strong> uses the control-plane database for tenant data until you later attach a
+                separate DB in Platform → company → Infra. Provisioning will <strong className="text-surface-300">not</strong> create an isolated
+                database on create (unless your server sets <code className="text-surface-400">PROVISION_SHARED_DB_BOOTSTRAP=true</code>).
+                <br />
+                <strong className="text-surface-300">Dedicated</strong> provisions the database you specify here (requires{" "}
+                <code className="text-surface-400">PG_ADMIN_URL</code> on the server for create). AI keys and models stay editable later in Infra.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeploymentMode("SHARED")}
+                  className={`text-left rounded-xl border p-4 transition-all ${
+                    deploymentMode === "SHARED"
+                      ? "border-primary-500/50 bg-primary-500/10 text-primary-300"
+                      : "border-surface-700 bg-surface-900/50 text-surface-400 hover:border-surface-600"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-surface-100">Shared</p>
+                  <p className="text-xs mt-1.5 opacity-90 leading-relaxed">Default. Simpler ops; configure a tenant DB later if needed.</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeploymentMode("DEDICATED")}
+                  className={`text-left rounded-xl border p-4 transition-all ${
+                    deploymentMode === "DEDICATED"
+                      ? "border-primary-500/50 bg-primary-500/10 text-primary-300"
+                      : "border-surface-700 bg-surface-900/50 text-surface-400 hover:border-surface-600"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-surface-100">Dedicated</p>
+                  <p className="text-xs mt-1.5 opacity-90 leading-relaxed">Isolated Postgres from day one; connection details required below.</p>
+                </button>
+              </div>
+
+              {deploymentMode === "DEDICATED" && (
+                <div className="space-y-3 pt-2 border-t border-surface-700/80">
+                  <p className="text-xs text-surface-400 font-medium">
+                    Database connection <ReqBadge /> — choose <strong className="text-surface-200">one</strong> path:
+                  </p>
+                  <div>
+                    <Input
+                      label="Full PostgreSQL URL"
+                      hint="Optional. Use this OR the host + database + credential fields below (not both required)."
+                      value={dedicatedDbUrl}
+                      onChange={(e) => setDedicatedDbUrl(e.target.value)}
+                      placeholder="postgresql://user:pass@host:5432/dbname"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <p className="text-[0.6875rem] text-surface-500 text-center">— or —</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      label="DB host"
+                      hint="Required with partial connection (unless URL above)."
+                      value={dedicatedDbHost}
+                      onChange={(e) => setDedicatedDbHost(e.target.value)}
+                      placeholder="db.example.com"
+                    />
+                    <Input
+                      label="DB port"
+                      hint="Optional. Default 5432 if empty."
+                      value={dedicatedDbPort}
+                      onChange={(e) => setDedicatedDbPort(e.target.value.replace(/\D/g, ""))}
+                      placeholder="5432"
+                    />
+                    <div className="sm:col-span-2">
+                      <Input
+                        label="Database name"
+                        hint="Required with partial connection."
+                        value={dedicatedDbName}
+                        onChange={(e) => setDedicatedDbName(e.target.value)}
+                        placeholder="taskflow_acme"
+                      />
+                    </div>
+                    <Input
+                      label="DB user secret ref"
+                      hint="Env var name or literal username (required with partial connection)."
+                      value={dedicatedDbUserRef}
+                      onChange={(e) => setDedicatedDbUserRef(e.target.value)}
+                      placeholder="MY_TENANT_DB_USER"
+                    />
+                    <Input
+                      label="DB password secret ref"
+                      hint="Env var name or literal password (required with partial connection)."
+                      type="password"
+                      autoComplete="new-password"
+                      value={dedicatedDbPasswordRef}
+                      onChange={(e) => setDedicatedDbPasswordRef(e.target.value)}
+                      placeholder="MY_TENANT_DB_PASSWORD"
+                    />
+                  </div>
+                  <Input
+                    label="DB URL secret ref"
+                    hint="Optional. Env var whose value is a full postgres:// URL (alternative to inline URL field)."
+                    value={dedicatedDbUrlSecretRef}
+                    onChange={(e) => setDedicatedDbUrlSecretRef(e.target.value)}
+                    placeholder="TENANT_ACME_DATABASE_URL"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-0.5">
+                <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">AI</h3>
+                <p className="text-[0.65rem] text-surface-500">
+                  Optional · editable anytime in Platform → company → Infra or tenant Settings (super admin).
+                </p>
+              </div>
+              <Input
+                label="Gemini API key (platform)"
+                type="password"
+                autoComplete="new-password"
+                value={geminiApiKeyPlatform}
+                onChange={(e) => setGeminiApiKeyPlatform(e.target.value)}
+                placeholder="Leave empty to use server GEMINI_API_KEY or secret refs"
+              />
+              <p className="text-xs text-surface-500">
+                Not required at create. If empty, resolution uses infra secret refs /{" "}
+                <code className="text-surface-400">GEMINI_API_KEY</code> per your deployment.
+              </p>
             </div>
 
             {/* Modules */}

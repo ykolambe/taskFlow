@@ -89,6 +89,63 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
   const [addingStatus, setAddingStatus] = useState(false);
   const [showAddStatus, setShowAddStatus] = useState(false);
 
+  type AiGeminiInfo = {
+    aiAddonEnabled: boolean;
+    hasTenantGeminiKey: boolean;
+    hasPlatformGeminiKey: boolean;
+  };
+  const [aiGemini, setAiGemini] = useState<AiGeminiInfo | null>(null);
+  const [tenantGeminiDraft, setTenantGeminiDraft] = useState("");
+  const [savingAiKey, setSavingAiKey] = useState(false);
+  const [loadingAiKey, setLoadingAiKey] = useState(false);
+
+  useEffect(() => {
+    if (!user.isSuperAdmin) return;
+    let cancelled = false;
+    setLoadingAiKey(true);
+    void fetch(`/api/t/${slug}/infra/gemini-key`)
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (cancelled || !r.ok || !j?.success || !j.data) throw new Error("load_failed");
+        return j.data as AiGeminiInfo;
+      })
+      .then((data) => {
+        if (!cancelled) setAiGemini(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAiGemini(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAiKey(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, user.isSuperAdmin]);
+
+  const saveTenantGeminiKey = async () => {
+    setSavingAiKey(true);
+    try {
+      const res = await fetch(`/api/t/${slug}/infra/gemini-key`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ geminiApiKeyTenant: tenantGeminiDraft.trim() || null }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(j.error || "Could not save Gemini key");
+        return;
+      }
+      toast.success(j.data?.hasTenantGeminiKey ? "Gemini API key saved." : "Tenant Gemini key removed.");
+      setTenantGeminiDraft("");
+      setAiGemini((prev) =>
+        prev ? { ...prev, hasTenantGeminiKey: Boolean(j.data?.hasTenantGeminiKey) } : prev
+      );
+    } finally {
+      setSavingAiKey(false);
+    }
+  };
+
   const addLevel = () => {
     const maxLv = roleLevels.reduce((m, l) => Math.max(m, Number(l.level) || 1), 0);
     const next = maxLv + 1;
@@ -342,6 +399,85 @@ export default function TenantSettings({ company, user, slug, taskStatuses: init
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {user.isSuperAdmin && (
+        <div className="bg-surface-800 border border-surface-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="w-4 h-4 text-primary-400" />
+            <h2 className="font-semibold text-surface-100">AI — Gemini API key</h2>
+          </div>
+          <p className="text-xs text-surface-500 mb-4">
+            When the AI add-on is on, you can optionally set a workspace Gemini key. The tenant key overrides a platform key and secret ref; if
+            none are set, the server uses <code className="text-surface-400">GEMINI_API_KEY</code> from the environment.
+          </p>
+          {loadingAiKey ? (
+            <p className="text-sm text-surface-500">Loading…</p>
+          ) : !aiGemini ? (
+            <p className="text-sm text-red-400/90">Could not load AI key settings.</p>
+          ) : !aiGemini.aiAddonEnabled ? (
+            <p className="text-sm text-surface-500">
+              AI add-on is not enabled for this workspace. Ask your platform operator to enable billing → AI add-on.
+            </p>
+          ) : (
+            <div className="space-y-3 max-w-lg">
+              <div className="text-xs text-surface-500 space-y-1">
+                <p>
+                  Tenant key:{" "}
+                  <span className={aiGemini.hasTenantGeminiKey ? "text-emerald-400/90" : "text-surface-500"}>
+                    {aiGemini.hasTenantGeminiKey ? "configured" : "not set"}
+                  </span>
+                </p>
+                <p>
+                  Platform key:{" "}
+                  <span className={aiGemini.hasPlatformGeminiKey ? "text-surface-300" : "text-surface-500"}>
+                    {aiGemini.hasPlatformGeminiKey ? "configured" : "not set"}
+                  </span>
+                </p>
+              </div>
+              <Input
+                label="Workspace Gemini API key (optional)"
+                type="password"
+                autoComplete="new-password"
+                value={tenantGeminiDraft}
+                onChange={(e) => setTenantGeminiDraft(e.target.value)}
+                placeholder={aiGemini.hasTenantGeminiKey ? "Enter new key to replace, or clear below" : "Paste Gemini API key"}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" loading={savingAiKey} onClick={saveTenantGeminiKey}>
+                  Save workspace key
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={savingAiKey || !aiGemini.hasTenantGeminiKey}
+                  onClick={async () => {
+                    setTenantGeminiDraft("");
+                    setSavingAiKey(true);
+                    try {
+                      const res = await fetch(`/api/t/${slug}/infra/gemini-key`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ geminiApiKeyTenant: null }),
+                      });
+                      const j = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        toast.error(j.error || "Could not remove key");
+                        return;
+                      }
+                      toast.success("Tenant Gemini key removed.");
+                      setAiGemini((prev) => (prev ? { ...prev, hasTenantGeminiKey: false } : prev));
+                    } finally {
+                      setSavingAiKey(false);
+                    }
+                  }}
+                >
+                  Remove workspace key
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
